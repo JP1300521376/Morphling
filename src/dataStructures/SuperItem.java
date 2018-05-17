@@ -119,8 +119,8 @@ public class SuperItem implements Comparable<SuperItem>{
         sb.append("id:" + chromIdx);
         sb.append(" t:" + type);
         sb.append(" p:" + superItemPos);
-        sb.append(" w:" + weight);
-        sb.append(" r:" + weightRatio);
+//        sb.append(" w:" + weight);
+//        sb.append(" r:" + weightRatio);
         return sb.toString();
     }    
     

@@ -36,10 +36,10 @@ public class MophlingV2 {
         
 //        String bamFile = workingDir + "NA12878.mapped.ILLUMINA.bwa.CEU.high_coverage_pcr_free.20130906.bam";
 //        String fastaIndexFile = "/Users/jiadonglin/SV_data/1K_Project_Ref/hs37d5.fa.fai";
-        String superitemOut = workingDir + "morphlingv1/wgs.all.superitems.debug.txt";
-        String mergedPatternOut = workingDir + "morphlingv1/wgs.merged.patterns.txt";
+        String superitemOut = workingDir + "morphlingv1/wgs.all.superitems.txt";
+        String mergedPatternOut = workingDir + "morphlingv1/wgs.merged.patterns.v1.txt";
 //        String frequentPatternOut = workingDir + "morphling/chr1.frequent.patterns.txt";       
-        String svRegionOut = workingDir + "morphlingv1/wgs.svRegion.sup30.mapq20.out";
+        String svRegionOut = workingDir + "morphlingv1/wgs.svRegion.sup30.mapq20.v1.out";
         
 //        int fragMean = 425;
 //        int readLen = 250;

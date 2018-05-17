@@ -23,12 +23,18 @@ public class svOutInfo {
     int[] supEvi;
     int[] selfLinkedMapQ;
     int[] selfLinkedWeight;
+    String[] selfLinkedItemTypes;
     // Used for saving SVs called from a pattern, usually > 100bp
     List<Integer> weights;
     List<Integer> postions;    
     List<Double> ratios;
     List<String> oris;
+    int[] arpSpanBpMapQ;
+    int[] arpSpanBpWeight;
+    String[] arpSpanBpItem;
     
+    boolean isPassed = true;
+            
     public svOutInfo(int s, int e, String patternStr, int linkFlag, int[] supEvidence, List<Integer> weight, List<Integer> pos, List<Double> wRatio, List<String> oris){        
         start = s;
         end = e;
@@ -57,13 +63,21 @@ public class svOutInfo {
     }
     @Override
     public String toString(){
+        if (linkType == 9){
+            isPassed = false;
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("\t");
         sb.append(start);
         sb.append("\t");
         sb.append(end);
         sb.append("\t");
-        
+        if (isPassed){
+            sb.append("PASS");
+        }else{
+            sb.append("LowQual");
+        }
+        sb.append("\t");
         sb.append(infoToString());
         return sb.toString();
     }
@@ -71,12 +85,13 @@ public class svOutInfo {
         StringBuilder sb = new StringBuilder();
         sb.append("SupType=");
         if(linkType == -1){
-            sb.append("Self");            
-
+            sb.append("Self");                        
             sb.append(";LinkedMapQ=");
             sb.append(intArrayToString(selfLinkedMapQ));
             sb.append(";LinkedWeight=");
             sb.append(intArrayToString(selfLinkedWeight));
+            sb.append(";LinkedItem=");
+            sb.append(strArrayToString(selfLinkedItemTypes));
         }
         if(linkType == 0){
             sb.append("None");            
@@ -86,6 +101,12 @@ public class svOutInfo {
             sb.append("ARP_Span");               
             sb.append(";ARP_SUP=");
             sb.append(supEvi[0]);
+            sb.append(";BP_mapQ=");
+            sb.append(intArrayToString(arpSpanBpMapQ));
+            sb.append(";BP_weight=");
+            sb.append(intArrayToString(arpSpanBpWeight));
+            sb.append(";BP_item=");
+            sb.append(strArrayToString(arpSpanBpItem));
         }                
         if (linkType == 2){
             sb.append("ARP_Span&Split;");            
@@ -93,6 +114,7 @@ public class svOutInfo {
             sb.append(supEvi[0]);
             sb.append(";Split_SUP=");
             sb.append(supEvi[3]);
+            
         }
         if (linkType == 3){
             sb.append("Split;");
@@ -224,6 +246,17 @@ public class svOutInfo {
         return outStr;
     }
     
+    private String strArrayToString(String[] array){
+        StringBuilder sb = new StringBuilder();
+        for (String ele : array){
+            sb.append(ele);
+            sb.append(",");
+        }
+        String str = sb.toString();
+        String outStr = str.substring(0, str.length() - 1);
+        return outStr;
+    }
+    
     public void setSvInfo(String patternStr, List<Integer> weights, List<Integer> posList, List<Double> ratios, List<String> oris){
         pattern = patternStr;
         this.weights = weights;
@@ -232,9 +265,42 @@ public class svOutInfo {
         this.oris = oris;
     }
     
-    public void setSelfLinkedInfo(int[] mapQ, int[] weight){
+    public void setArpSpanInfo(int[] mapQ, int[] weight, String[] itemTypes){
+        arpSpanBpMapQ = mapQ;
+        arpSpanBpWeight = weight;
+        
+        if (linkType == 1){
+            arpSpanBpItem = itemTypes;
+            if (itemTypes[0].contains("ARP") && !itemTypes[1].contains("ARP")){
+                isPassed = false;
+            }
+            else if (!itemTypes[0].contains("ARP") && itemTypes[1].contains("APR")){
+                isPassed = false;
+            }
+            else if (itemTypes[0].equals(itemTypes[1]) && !itemTypes[0].contains("ARP")){
+                isPassed = false;
+            }
+        }            
+        
+    }
+    
+    public void setSelfLinkedInfo(int[] mapQ, int[] weight, String[] itemTypes){
         selfLinkedMapQ = mapQ;
         selfLinkedWeight = weight;
+        
+        if (linkType == -1){
+            selfLinkedItemTypes = itemTypes;
+            if (itemTypes[0].contains("ARP") && !itemTypes[1].contains("ARP")){
+                isPassed = false;
+            }
+            else if (!itemTypes[0].contains("ARP") && itemTypes[1].contains("APR")){
+                isPassed = false;
+            }
+            else if (itemTypes[0].equals(itemTypes[1]) && !itemTypes[0].contains("ARP")){
+                isPassed = false;
+            }
+        }           
+        
     }
     /**
      * Used to check if two SV are identical, just for SV < readLen
@@ -258,14 +324,25 @@ public class svOutInfo {
         }
         return identical;
     }
+       
     
     public void writeVariantsOutput(BufferedWriter regionWriter, String chrName, StringBuilder sb) throws IOException{
-       if (end - start > 50){
-            sb.append(chrName);
-            sb.append(toString());
-            regionWriter.write(sb.toString());
-            regionWriter.newLine();
-       }
+        if (end - start > 50){
+            
+            if(linkType == 1 && (arpSpanBpMapQ[0] > arpSpanBpWeight[0]*20 && arpSpanBpMapQ[1] > arpSpanBpWeight[1]*20)){
+                sb.append(chrName);
+                sb.append(toString());
+                regionWriter.write(sb.toString());
+                regionWriter.newLine();
+            }            
+            else if (linkType != 1){
+                sb.append(chrName);
+                sb.append(toString());
+                regionWriter.write(sb.toString());
+                regionWriter.newLine();
+            }
+            
+        }
        
     }
 }
