@@ -61,7 +61,8 @@ public class ContiguousFSPM {
     final private int patternSpanMaxRegion;
     private SequenceDatabase database;
     private Map<String, List<ItemSeqIdentifier>> itemAppearMap;
-    
+    private Map<String, List<int[]>> maskedRegion;
+      
     
     public ContiguousFSPM(int minSup, int maxRegionSpan){
         this.minsuppAbsolute = minSup;
@@ -496,7 +497,7 @@ public class ContiguousFSPM {
      */
     private void wgsPatternMerge(String mergedPatternOut, BufferedWriter regionWriter) throws IOException{
         System.out.println("\nStart pattern post-processing, total candidate patterns: " + patternCount);
-
+        BufferedWriter tmpWriter = new BufferedWriter(new FileWriter("/Users/jiadonglin/SV_data/NA19238/morphlingv1/notUsedPattern.txt"));
 //        BufferedWriter regionWriter = new BufferedWriter(new FileWriter(svRegionOut));       
         BufferedWriter mergedWriter;
         
@@ -517,9 +518,10 @@ public class ContiguousFSPM {
             }
             Map<Integer, List<Integer>> indexMap = getPatternStartIndexMap(allPatterns);
             List<pseudoSequentialPattern> mergedPatterns = oneChromMerge(i, allPatterns, indexMap);
-            oneChrPatternLinkageAnalysis(mergedWriter, regionWriter, mergedPatterns);
+            oneChrPatternLinkageAnalysis(mergedWriter, regionWriter, mergedPatterns, tmpWriter);
         }
         regionWriter.close();
+        tmpWriter.close();
         if (mergedWriter != null){
             mergedWriter.close();
         }        
@@ -650,7 +652,8 @@ public class ContiguousFSPM {
      * @param mergedPatterns
      * @throws IOException 
      */
-    private void oneChrPatternLinkageAnalysis(BufferedWriter patternWriter, BufferedWriter regionWriter, List<pseudoSequentialPattern> mergedPatterns) throws IOException{
+    private void oneChrPatternLinkageAnalysis(BufferedWriter mergedPatternWriter, BufferedWriter regionWriter, List<pseudoSequentialPattern> mergedPatterns, BufferedWriter tmpWriter) throws IOException{
+                
         
         Linkage linkageAnalyzer = new Linkage();        
         Collections.sort(mergedPatterns);            
@@ -665,13 +668,17 @@ public class ContiguousFSPM {
         for (int i = 0; i < patternNums; i ++){
             
             pseudoSequentialPattern pattern = mergedPatterns.get(i);
-            if (patternWriter != null){
-                patternWriter.write(pattern.toString(database));
-                patternWriter.newLine();
+            
+            if (patternInMaskedRegion(pattern, maskedRegion)){
+                continue;
             }
-//            if (pattern.patternLeftMostPos == 933740){
-//                System.out.println(pattern.toString(database));
-//            }
+            
+            if (mergedPatternWriter != null){
+                mergedPatternWriter.write(pattern.toString(database));
+                mergedPatternWriter.newLine();
+            }
+
+
             int[] splitAlignCoords = pattern.splitAlignForBP(database); 
                         
             pattern.splitAlignCheck(database, mergedPatterns, splitLinkPatternBuffer, splitAlignCoords);
@@ -697,6 +704,11 @@ public class ContiguousFSPM {
             else{
                 boolean isSelfLinked = pattern.isSelfLinked(database);                  
                 
+//                if (isSelfLinked){
+//                    patternWriter.write(pattern.toString(database));
+//                    patternWriter.newLine();
+//                }
+                
                 if (isSelfLinked || isCrossSup){   
                     int[] val = new int[2];
                     val[0] = i;
@@ -718,7 +730,7 @@ public class ContiguousFSPM {
                 int mateIndex = val[0];
 
                 // Mate pattern is found through ARPs
-                if (val[0] != -1 && val[1] != -1){
+                if (val[0] != -1 && val[1] != -1){                                                
                     List<int[]> oldVal = linkedPatternInfo.get(i);
                     int orignialIndex = indexMap.get(mateIndex); 
                     val[0] = orignialIndex;
@@ -746,7 +758,7 @@ public class ContiguousFSPM {
         }        
         
         callSVFromLinked(linkedPatternInfo, splitLinkPatternBuffer, mergedPatterns, regionWriter);
-        callSVFromUnlinked(unLinkedPattern, mergedPatterns, regionWriter);
+        callSVFromUnlinked(unLinkedPattern, mergedPatterns, regionWriter, tmpWriter);
         
     }
     /**
@@ -756,61 +768,105 @@ public class ContiguousFSPM {
      * @param regionWriter
      * @throws IOException 
      */
-    private void callSVFromUnlinked(Set<Integer> unLinkedPattern, List<pseudoSequentialPattern> mergedPatterns, BufferedWriter regionWriter) throws IOException{
+    private void callSVFromUnlinked(Set<Integer> unLinkedPattern, List<pseudoSequentialPattern> mergedPatterns, BufferedWriter regionWriter, BufferedWriter tmpWriter) throws IOException{
         StringBuilder sb;
-        int localAlignedSV = 0;
+//        int localAlignedSV = 0;
+        
         for (Integer id : unLinkedPattern){
+            sb = new StringBuilder();
             pseudoSequentialPattern pattern = mergedPatterns.get(id); 
             int leftBound = pattern.patternLeftMostPos - 200;
             int rightBound = pattern.patternLeftMostPos + 200;
-            if (pattern.patternRightMostPos - pattern.patternLeftMostPos > 400){
-                continue;
-            }            
-            String chrName = pattern.getChrName(pattern.ChromId, chrIdxInDatabase);
-            ReferenceSequence seq = refSeqFile.getSubsequenceAt(chrName, leftBound, rightBound);
-            String refStr = seq.getBaseString();
             
-//            if (pattern.patternLeftMostPos == 194147){                
-//                System.out.println(pattern.toString(database));
-//                List<svOutInfo> svFromLocalAlign = pattern.doLocalAlign(database, refStr, leftBound);                
-//            }
-
-            int[] crossLinkInfo = pattern.getCrossSupInfo();
-            int[] arpInferedPos = pattern.arpLinkInfer(database, 20);
-            
-            // Do local alignment              
-            List<svOutInfo> svFromLocalAlign = pattern.doLocalAlign(database, refStr, pattern.patternLeftMostPos - 200);                  
             int[] supEvi = new int[]{0,-1, -1};
-            sb = new StringBuilder();
-
-            if (!svFromLocalAlign.isEmpty()){
-                for (svOutInfo sv : svFromLocalAlign){
-                    sb = new StringBuilder();
-                    localAlignedSV += 1;
-                    sv.setSvInfo(pattern.toString(database), pattern.getWeights(), pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
-//                    System.out.println(sv.toString());
-                    sv.writeVariantsOutput(regionWriter, chrName, sb);
+            String chrName = pattern.getChrName(pattern.ChromId, chrIdxInDatabase);
+                        
+            if (pattern.hasArpSuperItem() && pattern.patternRightMostPos - pattern.patternLeftMostPos > 200){
+//                    System.out.println(pattern.toString(database));
+                
+                int[] estimatedInfo = pattern.unlinkedArpPatternPosEstimate(database, 20);
+                if (estimatedInfo[2] != -3 && estimatedInfo[2] != -2 && estimatedInfo[2] > 10){
+                    supEvi[1] = estimatedInfo[2];
+                    supEvi[2] = 0;
+                    svOutInfo svInfo = new svOutInfo(estimatedInfo[0], estimatedInfo[1], pattern.toTypeString(database), 9, supEvi, pattern.getWeights(), 
+                            pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
+                    svInfo.writeVariantsOutput(regionWriter, chrName, sb);
+                }
+                else if (estimatedInfo[2] == -3){
+                    svOutInfo svInfo = new svOutInfo(estimatedInfo[0], estimatedInfo[1], pattern.toTypeString(database), estimatedInfo[2], supEvi, pattern.getWeights(), 
+                            pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
+                    svInfo.writeVariantsOutput(regionWriter, chrName, sb);
+                }
+                else if (estimatedInfo[2] == -2){
+                    svOutInfo svInfo = new svOutInfo(estimatedInfo[0], estimatedInfo[1], pattern.toTypeString(database), estimatedInfo[2], supEvi, pattern.getWeights(), 
+                            pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
+                    svInfo.writeVariantsOutput(regionWriter, chrName, sb);
                 }
             }
-            else if (arpInferedPos[0] > 0 && arpInferedPos[1] > 0 && arpInferedPos[2] > 10){
+            else{
                 
-                supEvi[1] = arpInferedPos[2];
-                supEvi[2] = 0;
-                svOutInfo svInfo = new svOutInfo(arpInferedPos[0], arpInferedPos[1], pattern.toString(database), 9, supEvi, pattern.getWeights(), 
+                ReferenceSequence seq = refSeqFile.getSubsequenceAt(chrName, leftBound, rightBound);
+                String refStr = seq.getBaseString();
+                
+                
+                
+                int[] crossLinkInfo = pattern.getCrossSupInfo();
+                int[] arpInferedPos = pattern.arpLinkInfer(database, 20);
+                int[] oemEstimatePos = pattern.oemPatternPosEstimate(database);
+                int[] multiBpPos = pattern.multiClippedPatternPosEstimate(database);
+                
+                // Do local alignment              
+                List<svOutInfo> svFromLocalAlign = pattern.doLocalAlign(database, refStr, pattern.patternLeftMostPos - 200);                  
+                                
+                if (!svFromLocalAlign.isEmpty()){
+                    for (svOutInfo sv : svFromLocalAlign){
+                        sb = new StringBuilder();
+    //                    localAlignedSV += 1;
+                        sv.setSvInfo(pattern.toTypeString(database), pattern.getWeights(), pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
+    //                    System.out.println(sv.toString());
+                        sv.writeVariantsOutput(regionWriter, chrName, sb);
+                    }
+                }
+                else if (arpInferedPos[0] > 0 && arpInferedPos[1] > 0 && arpInferedPos[2] > 10){
+
+                    supEvi[1] = arpInferedPos[2];
+                    supEvi[2] = 0;
+                    svOutInfo svInfo = new svOutInfo(arpInferedPos[0], arpInferedPos[1], pattern.toTypeString(database), 9, supEvi, pattern.getWeights(), 
+                            pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
+                    svInfo.writeVariantsOutput(regionWriter, chrName, sb);
+                }
+                else if (crossLinkInfo[0] > 0 && crossLinkInfo[1] > 0 && crossLinkInfo[2] > 20){
+                    supEvi[1] = crossLinkInfo[2];
+                    supEvi[2] = crossLinkInfo[3];
+                    svOutInfo svInfo = new svOutInfo(crossLinkInfo[0], crossLinkInfo[1], pattern.toTypeString(database), 
+                            8, supEvi, pattern.getWeights(), pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
+                    svInfo.writeVariantsOutput(regionWriter, chrName, sb);
+                }
+                else if (oemEstimatePos[0] > 0 || oemEstimatePos[1] > 0) {
+                                    
+                    supEvi[1] = oemEstimatePos[2];
+                    
+                    svOutInfo svInfo = new svOutInfo(oemEstimatePos[0], oemEstimatePos[1], pattern.toTypeString(database), -4, supEvi, pattern.getWeights(), 
                         pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
-                svInfo.writeVariantsOutput(regionWriter, chrName, sb);
-            }
-            else if (crossLinkInfo[0] > 0 && crossLinkInfo[1] > 0 && crossLinkInfo[2] > 20){
-                supEvi[1] = crossLinkInfo[2];
-                supEvi[2] = crossLinkInfo[3];
-                svOutInfo svInfo = new svOutInfo(crossLinkInfo[0], crossLinkInfo[1], pattern.toString(database), 
-                        8, supEvi, pattern.getWeights(), pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
-                svInfo.writeVariantsOutput(regionWriter, chrName, sb);
-            }
-            
-        }
-        System.out.println("Pattern has local align: " + localAlignedSV);
+
+//                    System.out.println(svInfo.toString());
+                    svInfo.writeVariantsOutput(regionWriter, chrName, sb);
+                    
+                }
+                else if (multiBpPos[0] > 0 && multiBpPos[1] > 0){
+                    svOutInfo svInfo = new svOutInfo(multiBpPos[0], multiBpPos[1], pattern.toTypeString(database), -5, supEvi, pattern.getWeights(), 
+                        pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
+                    svInfo.writeVariantsOutput(regionWriter, chrName, sb);
+                }
+                else{
+                    tmpWriter.write(pattern.toString(database));
+                    tmpWriter.newLine();
+                }
+            }                                                  
+        }        
+//        System.out.println("Pattern has local align: " + localAlignedSV);
     }
+
     /**
      * Call SVs from patterns that are linked by ARP, cross or split align.
      * @param linkedPatternInfo
@@ -820,6 +876,9 @@ public class ContiguousFSPM {
      * @throws IOException 
      */
     private void callSVFromLinked(Map<Integer, List<int[]>> linkedPatternInfo, Map<Integer, Integer> splitLinkPatternBuffer, List<pseudoSequentialPattern> mergedPatterns, BufferedWriter regionWriter) throws IOException{
+        
+//        BufferedWriter notCalledPatternWriter = new BufferedWriter(new FileWriter("/Users/jiadonglin/SV_data/NA19238/morphlingv1/wgs.notCalledLinkedPatterns.txt"));
+
         // Call SVs from split align linked patterns
         for (Entry<Integer, Integer> entry : splitLinkPatternBuffer.entrySet()){
             int linkType = 3;
@@ -829,9 +888,9 @@ public class ContiguousFSPM {
             StringBuilder sb = new StringBuilder();
             pseudoSequentialPattern pattern = mergedPatterns.get(idx);             
 
-            if (pattern.patternLeftMostPos == 933740){
-                System.out.println(pattern.toString(database));
-            }
+//            if (pattern.patternLeftMostPos == 933740){
+//                System.out.println(pattern.toString(database));
+//            }
 
             int[] coords = pattern.getSplitAlignCoords();
             if (coords[0] > 0 && coords[1] > 0){
@@ -844,7 +903,7 @@ public class ContiguousFSPM {
                     supEvi[2] = crossSupInfo[3];                    
                     linkType = 7;
                 }
-                svOutInfo svInoInfo = new svOutInfo(coords[0], coords[1], pattern.toString(database), linkType, supEvi, pattern.getWeights(), 
+                svOutInfo svInoInfo = new svOutInfo(coords[0], coords[1], pattern.toTypeString(database), linkType, supEvi, pattern.getWeights(), 
                         pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
                 svInoInfo.writeVariantsOutput(regionWriter, chrIdxInDatabase[pattern.ChromId], sb);
             }
@@ -877,6 +936,7 @@ public class ContiguousFSPM {
             int[] estBps = new int[2];
             int[] crossSupInfo = pattern.getCrossSupInfo();
             int[] supEvi = new int[]{sup, -1, -1, pattern.getSplitSupCount(), pattern.getSplitReadMapQ()};
+            
              // self linked pattern by ARPs
             if (mateIdx == patternIdx && pattern.selfLinkedSuperItemMapQCheck(20)){  
                 
@@ -889,7 +949,7 @@ public class ContiguousFSPM {
                         linkType = 6;
                     }
                     estBps = splitAlignCoords;
-                    svOutInfo svInfo = new svOutInfo(estBps[0], estBps[1], pattern.toString(database), linkType, supEvi, pattern.getWeights(), 
+                    svOutInfo svInfo = new svOutInfo(estBps[0], estBps[1], pattern.toTypeString(database), linkType, supEvi, pattern.getWeights(), 
                             pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
                     svInfo.writeVariantsOutput(regionWriter, chrIdxInDatabase[pattern.ChromId], sb);
                     linkedPatternCalled.add(patternIdx);
@@ -903,7 +963,7 @@ public class ContiguousFSPM {
                     supEvi[2] = crossSupInfo[3];
                                         
                     if (estBps[0] > 0 && estBps[1] > 0){
-                        svOutInfo svInfo = new svOutInfo(estBps[0], estBps[1], pattern.toString(database), linkType, supEvi, pattern.getWeights(), 
+                        svOutInfo svInfo = new svOutInfo(estBps[0], estBps[1], pattern.toTypeString(database), linkType, supEvi, pattern.getWeights(), 
                                 pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
                         svInfo.writeVariantsOutput(regionWriter, chrIdxInDatabase[pattern.ChromId], sb);
                         linkedPatternCalled.add(patternIdx);
@@ -913,7 +973,7 @@ public class ContiguousFSPM {
                     linkType = -1; 
                     
                     if (selfLinkedBP[0] > 0 && selfLinkedBP[1] > 0 && pattern.selfLinkedPatternMapQFilter(20)){
-                        svOutInfo svInfo = new svOutInfo(selfLinkedBP[0], selfLinkedBP[1], pattern.toString(database), linkType, supEvi, pattern.getWeights(), 
+                        svOutInfo svInfo = new svOutInfo(selfLinkedBP[0], selfLinkedBP[1], pattern.toTypeString(database), linkType, supEvi, pattern.getWeights(), 
                                 pattern.getPos(), pattern.getWeightRatio(), pattern.getOris());
                         svInfo.setSelfLinkedInfo(pattern.getSelfLinkedItemMapQ(), pattern.getSelfLinkedItemWeight(), pattern.getSelfLinkedItemType());
                         svInfo.writeVariantsOutput(regionWriter, chrIdxInDatabase[pattern.ChromId], sb);
@@ -921,7 +981,8 @@ public class ContiguousFSPM {
                     }
                 }
                 
-            }else{
+            }
+            else{
                 pseudoSequentialPattern matePattern = mergedPatterns.get(mateIdx);
 //                System.out.println(matePattern.toString(database));
                 estBps = pattern.estimateBreakpointPos(matePattern, database);
@@ -946,13 +1007,13 @@ public class ContiguousFSPM {
                     List<String> oris = pattern.getOris();
                     oris.addAll(matePattern.getOris());
                     
-                    String patternStr = pattern.toString(database) + "<>" + matePattern.toString(database);
+                    String patternStr = pattern.toTypeString(database) + "<>" + matePattern.toTypeString(database);
                     svOutInfo svInfo = new svOutInfo(estBps[0], estBps[1], patternStr, linkType, supEvi, weights, pos, weightRatio,oris);
                     svInfo.setArpSpanInfo(pattern.getArpSpanMapQ(), pattern.getArpSpanWeight(), pattern.getArpSpanItemType());
                     svInfo.writeVariantsOutput(regionWriter, chrIdxInDatabase[pattern.ChromId], sb);
                 }
-            }
-        }
+            }            
+        }                
     }
     
     
@@ -1196,7 +1257,35 @@ public class ContiguousFSPM {
             }
         }
     }
-    
+    public void setCenteromeres(String aFile) throws IOException{
+        maskedRegion = new HashMap<>();
+        FileInputStream fin = new FileInputStream(new File(aFile));
+        BufferedReader myInput = new BufferedReader(new InputStreamReader(fin));
+        String thisLine;
+        
+        while((thisLine = myInput.readLine()) != null){
+            String[] tokens = thisLine.split("\t");
+            String chrName = tokens[1];
+            int[] region = new int[]{Integer.parseInt(tokens[2]), Integer.parseInt(tokens[3])};
+            List<int[]> regions = maskedRegion.get(chrName);
+            if (regions == null){
+                regions = new ArrayList<>();
+                regions.add(region);
+                maskedRegion.put(chrName, regions);
+            }else{
+                regions.add(region);
+            }
+        }
+    }
+    private boolean patternInMaskedRegion(pseudoSequentialPattern pattern, Map<String, List<int[]>> maskedRegions){
+        List<int[]> regions = maskedRegions.get(chrIdxInDatabase[pattern.ChromId]);
+        for (int[] region : regions){
+            if (pattern.patternLeftMostIntervalStart >= region[0] && pattern.patternRightMostPos <= region[1]){
+                return true;
+            }
+        }
+        return false;
+    }
     public void printAlgoStatistics(){
         StringBuilder r = new StringBuilder(200);
         r.append("\n=============  Contiguous-FSPM =============\n Total time ~ ");

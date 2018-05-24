@@ -36,5 +36,5 @@ public class pseudoSuperItem implements Comparable<pseudoSuperItem>{
     @Override
     public int compareTo(pseudoSuperItem otherItem){
         return leftMostPos - otherItem.leftMostPos;
-    }
+    }  
 }

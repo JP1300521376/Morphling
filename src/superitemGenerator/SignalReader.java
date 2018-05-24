@@ -223,7 +223,12 @@ public class SignalReader {
             }
         }                                               
     }        
-      
+    /**
+     * Analysis each BAM record through different channels
+     * @param iterator
+     * @param windowStart
+     * @param cigarOper 
+     */
     private void analysisAlignment(SAMRecordIterator iterator, int windowStart, CigarOps cigarOper){
 //        CigarOps corasenCigar = new CigarOps();
         while(iterator.hasNext()){
@@ -234,17 +239,17 @@ public class SignalReader {
             if (!idxToChromMap.containsKey(recordChrIdx)){
                 idxToChromMap.put(recordChrIdx, recordChrName);
             }
-
-            if (mapq <= minMapQ){
+            // Discard reads of low quality and PCR duplicated reads
+            if (mapq <= minMapQ || record.getDuplicateReadFlag()){
                 continue;
-            }
+            }            
             List<CigarElement> cigarElements = record.getCigar().getCigarElements();
-            // discard reads with clipped sequence longer than 70% of read length.
+            
             if (badReads(cigarElements)){
                 continue;
             }
             // count the number of normal read per base
-            int isGoodAlign = goodAlignment(cigarElements);
+            int isGoodAlign = exactAlignment(cigarElements);
             if (isGoodAlign != -1){
                 updateReadDepthArray(record.getAlignmentStart(), isGoodAlign, windowStart);
             }                        
@@ -288,24 +293,32 @@ public class SignalReader {
         }
         return newBuffer;
     }
-    
+    /**
+     * Discard reads of clipped length longer than 70% of the read length 
+     * @param cigarElements
+     * @return 
+     */
     private boolean badReads(List<CigarElement> cigarElements){
-        int totalClipped = 0;
+        int clippedLength = 0;
         boolean isBad = false;
         for (CigarElement element : cigarElements){
             String operation = element.getOperator().toString();
             int optLength = element.getLength();
             if (operation.equals("S") || operation.equals("H")){
-                totalClipped += optLength;
+                clippedLength += optLength;
             }
         }
-        if (totalClipped > 0.7 * readLen){
+        if (clippedLength > 0.7 * readLen){
             isBad = true;
         }
         return isBad;
     }
-    
-    private int goodAlignment(List<CigarElement> cigarElements){
+    /**
+     * Get exact matched read
+     * @param cigarElements
+     * @return 
+     */
+    private int exactAlignment(List<CigarElement> cigarElements){
         if (cigarElements.size() == 1){
             String cigarOperation = cigarElements.get(0).getOperator().toString();
             int opLength = cigarElements.get(0).getLength();
@@ -342,9 +355,15 @@ public class SignalReader {
         }
         return overlap;
     }   
+    /**
+     * Process soft clipped reads
+     * @param record
+     * @param cigarElements
+     * @param cigarOper 
+     */
     
     private void SEClippedParser(SAMRecord record, List<CigarElement> cigarElements, CigarOps cigarOper) {
-        // For a mapped read
+        // For a mapped read and read of relatively high mapQ
         if (!record.getReadUnmappedFlag()){
 
             String firstOperation = cigarElements.get(0).getOperator().toString();

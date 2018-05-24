@@ -5,10 +5,17 @@
  */
 package utils;
 import contiguousfspm.pseudoSequentialPattern;
+import htsjdk.samtools.QueryInterval;
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  *
@@ -34,11 +41,14 @@ public class svOutInfo {
     String[] arpSpanBpItem;
     
     boolean isPassed = true;
-            
+    
+    
+    
     public svOutInfo(int s, int e, String patternStr, int linkFlag, int[] supEvidence, List<Integer> weight, List<Integer> pos, List<Double> wRatio, List<String> oris){        
         start = s;
         end = e;
-        if (s > e){
+
+        if (s > e && e != -1){
             start = e;
             end = s;
         }
@@ -63,14 +73,23 @@ public class svOutInfo {
     }
     @Override
     public String toString(){
-        if (linkType == 9){
+        if (linkType == 9 || linkType == -3 || linkType == -4 || linkType == -5){
             isPassed = false;
         }
         StringBuilder sb = new StringBuilder();
         sb.append("\t");
+        if (start == -1 && end != -1){
+            start = end;
+            end = -1;
+        }
         sb.append(start);
         sb.append("\t");
-        sb.append(end);
+        if (end == -1){
+            sb.append("-");
+        }else{
+            sb.append(end);
+        }
+                
         sb.append("\t");
         if (isPassed){
             sb.append("PASS");
@@ -84,6 +103,23 @@ public class svOutInfo {
     private String infoToString(){
         StringBuilder sb = new StringBuilder();
         sb.append("SupType=");
+        if (linkType == -5){
+            sb.append("MultiBP");
+        }
+        if (linkType == -4){
+            sb.append("OEM;");
+            sb.append("OEMWeight=");
+            sb.append(supEvi[1]);
+        }
+        
+        if (linkType == -3){
+            sb.append("None");
+        }
+        
+        if (linkType == -2){
+            sb.append("SMALL_INSERT");
+        }
+        
         if(linkType == -1){
             sb.append("Self");                        
             sb.append(";LinkedMapQ=");
@@ -326,10 +362,11 @@ public class svOutInfo {
     }
        
     
+  
+    
     public void writeVariantsOutput(BufferedWriter regionWriter, String chrName, StringBuilder sb) throws IOException{
-        if (end - start > 50){
-            
-            if(linkType == 1 && (arpSpanBpMapQ[0] > arpSpanBpWeight[0]*20 && arpSpanBpMapQ[1] > arpSpanBpWeight[1]*20)){
+        if (end - start > 50){            
+            if(linkType == 1 && (arpSpanBpMapQ[0] > arpSpanBpWeight[0] * 20 && arpSpanBpMapQ[1] > arpSpanBpWeight[1] * 20)){
                 sb.append(chrName);
                 sb.append(toString());
                 regionWriter.write(sb.toString());
@@ -340,9 +377,13 @@ public class svOutInfo {
                 sb.append(toString());
                 regionWriter.write(sb.toString());
                 regionWriter.newLine();
-            }
-            
+            }            
         }
-       
+        if (end == -1){
+            sb.append(chrName);
+            sb.append(toString());
+            regionWriter.write(sb.toString());
+            regionWriter.newLine();
+        }       
     }
 }

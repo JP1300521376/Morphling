@@ -5,6 +5,7 @@
  */
 package dataStructures;
 
+import htsjdk.samtools.QueryInterval;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.FileInputStream;
@@ -56,6 +57,8 @@ public class SequenceDatabase {
             String[] tokens = thisLine.split("\t");                  
             String SuperItemType = tokens[0];
             String chrom = tokens[1];
+//            int weight = Integer.parseInt(tokens[6]);
+//            int sumMapQ = Integer.parseInt(tokens[8]);
             int ChromIdx = Integer.parseInt(chrom);
             if (!seqChromMap.containsKey(ChromIdx)){
                 curSeq = superitemInput.size();
@@ -70,7 +73,7 @@ public class SequenceDatabase {
 //                outputIndels(svRegionWriter, tokens, ratio);
                 continue;
             }
-            if (!SuperItemType.contains("ARP")&& (ratio > 0.1)){
+            if (!SuperItemType.contains("ARP")&& (ratio > 0.1)){               
                 SuperItem superitem = new SuperItem(tokens);
                 superitem.setChromName(seqChromMap.get(curSeq));
                 superitemInput.get(curSeq).add(superitem);

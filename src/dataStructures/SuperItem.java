@@ -63,11 +63,10 @@ public class SuperItem implements Comparable<SuperItem>{
         numMinusRead = Integer.parseInt(tokens[10]);
         splitAlignedRead = Integer.parseInt(tokens[11]);
         splitReadMapQ = Integer.parseInt(tokens[12]);
-        String superitemRegion = tokens[13];
-        superitemInterval = decodeIntervalFromString(superitemRegion);
         
-        String superitemMateRegion = tokens[14];
-        superitemMateInterval = decodeIntervalFromString(superitemMateRegion);
+        superitemInterval = decodeIntervalFromString(tokens[13]);
+                
+        superitemMateInterval = decodeIntervalFromString(tokens[14]);
                 
         String qNameColumn = tokens[15];
         if (!qNameColumn.equals("*")){
@@ -119,10 +118,14 @@ public class SuperItem implements Comparable<SuperItem>{
         sb.append("id:" + chromIdx);
         sb.append(" t:" + type);
         sb.append(" p:" + superItemPos);
-//        sb.append(" w:" + weight);
-//        sb.append(" r:" + weightRatio);
+        sb.append(" w:" + weight);
+        sb.append(" r:" + weightRatio);
         return sb.toString();
     }    
+    
+//    public String toItemType(){
+//        
+//    }
     
     private String qNamesToString(){
         String str = "*";
@@ -731,22 +734,5 @@ public class SuperItem implements Comparable<SuperItem>{
             }
         }               
         return sb.toString();
-    }
-    
-    private double calculateEntropy(Integer[] countList){
-        double ent = 0;
-        int sum = 0;
-        for (Integer ele : countList){
-            sum += ele;
-        }
-        for(int i = 0; i < 4; i++){
-            double prob = (double) countList[i] / sum;       
-            double val = 0;
-            if (prob != 0){
-                val = prob * (Math.log(prob)/Math.log(2));
-            }
-            ent -= val;
-        }
-        return ent;
-    }
+    }       
 }
