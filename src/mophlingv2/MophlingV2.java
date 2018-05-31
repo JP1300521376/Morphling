@@ -23,7 +23,8 @@ public class MophlingV2 {
      */
     public static void main(String[] args) throws IOException{
         // TODO code application logic here
-               String workingDir = "/Users/jiadonglin/SV_data/NA19238/";
+        String workingDir = "/Users/jiadonglin/SV_data/NA19238/";
+//        String workingDir = "/Users/jiadonglin/SV_data/tumors/";
 //        String workingDir = "/Users/jiadonglin/SV_data/NA12878/";
 
         String chr = null;      
@@ -31,15 +32,16 @@ public class MophlingV2 {
         int regionE = 0;
         
         String bamFile = workingDir + "NA19238.alt_bwamem_GRCh38DH.20150715.YRI.high_coverage.bam";
+//        String bamFile = workingDir + "CPD.bam";
         String fastaIndexFile = "/Users/jiadonglin/SV_data/ref_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai";
         String fastaFile = "/Users/jiadonglin/SV_data/ref_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa";
         
 //        String bamFile = workingDir + "NA12878.mapped.ILLUMINA.bwa.CEU.high_coverage_pcr_free.20130906.bam";
 //        String fastaIndexFile = "/Users/jiadonglin/SV_data/1K_Project_Ref/hs37d5.fa.fai";
         String superitemOut = workingDir + "morphlingv3/wgs.all.superitems.v3.txt";
-        String mergedPatternOut = workingDir + "morphlingv3/wgs.merged.patterns.v3.txt";
+        String mergedPatternOut = workingDir + "morphlingv3/wgs.merged.patterns.debug.txt";
 //        String frequentPatternOut = workingDir + "morphling/chr1.frequent.patterns.txt";       
-        String svRegionOut = workingDir + "morphlingv3/wgs.svRegion.sup30.mapq20.v3.out";
+        String svRegionOut = workingDir + "morphlingv3/wgs.svRegion.sup30.mapq20.debug.out";
         String centromeres = "/Users/jiadonglin/SV_data/ref_genome/centromeres.txt";
 //        int fragMean = 425;
 //        int readLen = 250;

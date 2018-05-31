@@ -58,7 +58,7 @@ public class stringMatcher {
         baseMap[(int)'G'] = 'C';
     }    
            
-    public void doStringAlign(List<String> readStrs, List<pseudoSuperItem> superitems, int refRegionLeft, String refStr, List<svOutInfo> alignedInfos, SequenceDatabase database){                
+     public void doStringAlign(List<String> readStrs, List<pseudoSuperItem> superitems, int refRegionLeft, String refStr, List<svOutInfo> alignedInfos, SequenceDatabase database){                
         for (int i = 0; i < readStrs.size(); i++){
             String curRead = readStrs.get(i);
             alignStrToRef(curRead, refStr);            
@@ -168,8 +168,8 @@ public class stringMatcher {
         expandMatchApprox(plusPrefix, minusPrefix, baseMatchBothStrandAtRef, baseMatchBothStrandAtRef, 1, 
                 readRevArray, refArray, false);
         
-        // Matched string length > 10bp
-        if (plusAlignInfo.getReadForMaxMatchLength() > 30 || minusAlignInfo.getReadForMaxMatchLength() > 30){
+        // Matched string length > 30bp
+        if (plusAlignInfo.getReadForMaxMatchLength() >= 30 || minusAlignInfo.getReadForMaxMatchLength() >= 30){
             if (plusAlignInfo.getReadForMaxMatchLength() > minusAlignInfo.getReadForMaxMatchLength()){
                 maxMatchAtRef = plusAlignInfo.getMaxMatchIdxAtRef();
                 maxMatchAtRead = plusAlignInfo.getMaxMatchIdxAtRead();            

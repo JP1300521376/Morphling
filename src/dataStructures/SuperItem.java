@@ -114,12 +114,14 @@ public class SuperItem implements Comparable<SuperItem>{
     
     // debug useage
     public String toConciseString(){
+        
         StringBuilder sb = new StringBuilder();
         sb.append("id:" + chromIdx);
         sb.append(" t:" + type);
         sb.append(" p:" + superItemPos);
         sb.append(" w:" + weight);
         sb.append(" r:" + weightRatio);
+        sb.append(" o:" + getReadOri());
         return sb.toString();
     }    
     

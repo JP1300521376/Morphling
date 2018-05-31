@@ -10,6 +10,7 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.List;
@@ -25,26 +26,29 @@ public class svOutInfo {
      
     int start;
     int end;
-    String pattern;
+    String pattern = "";
     int linkType; // 1 mate linked. -1 self linked. 0 non-linkable
+    String linkTypeStr = "";
     int[] supEvi;
     int[] selfLinkedMapQ;
     int[] selfLinkedWeight;
     String[] selfLinkedItemTypes;
     // Used for saving SVs called from a pattern, usually > 100bp
     List<Integer> weights;
-    List<Integer> postions;    
+//    List<Integer> postions;    
     List<Double> ratios;
     List<String> oris;
     int[] arpSpanBpMapQ;
     int[] arpSpanBpWeight;
     String[] arpSpanBpItem;
     
+    int[] suspeticRegion;
     boolean isPassed = true;
     
     
     
-    public svOutInfo(int s, int e, String patternStr, int linkFlag, int[] supEvidence, List<Integer> weight, List<Integer> pos, List<Double> wRatio, List<String> oris){        
+    
+    public svOutInfo(int s, int e, String patternStr, int linkFlag, int[] supEvidence, List<Integer> itemWeight, int[] susRegion, List<Double> wRatio, List<String> oris){        
         start = s;
         end = e;
 
@@ -55,8 +59,9 @@ public class svOutInfo {
         pattern = patternStr;
         linkType = linkFlag;
         supEvi = supEvidence;
-        weights = weight;
-        postions = pos;
+        weights = itemWeight;
+        suspeticRegion = susRegion;
+//        postions = pos;
         ratios = wRatio;
         this.oris = oris;
     }
@@ -104,23 +109,23 @@ public class svOutInfo {
         StringBuilder sb = new StringBuilder();
         sb.append("SupType=");
         if (linkType == -5){
+            linkTypeStr = "MultiBP";
             sb.append("MultiBP");
         }
         if (linkType == -4){
+            linkTypeStr = "OEM";
             sb.append("OEM;");
             sb.append("OEMWeight=");
             sb.append(supEvi[1]);
-        }
-        
-        if (linkType == -3){
-            sb.append("None");
-        }
+        }       
         
         if (linkType == -2){
+            linkTypeStr = "SMALL_INSERT";
             sb.append("SMALL_INSERT");
         }
         
         if(linkType == -1){
+            linkTypeStr = "Self";
             sb.append("Self");                        
             sb.append(";LinkedMapQ=");
             sb.append(intArrayToString(selfLinkedMapQ));
@@ -130,10 +135,12 @@ public class svOutInfo {
             sb.append(strArrayToString(selfLinkedItemTypes));
         }
         if(linkType == 0){
+            linkTypeStr = "None";
             sb.append("None");            
             sb.append(";SUP=NA");
         }
         if (linkType == 1){
+            linkTypeStr = "ARP_Span";
             sb.append("ARP_Span");               
             sb.append(";ARP_SUP=");
             sb.append(supEvi[0]);
@@ -145,6 +152,7 @@ public class svOutInfo {
             sb.append(strArrayToString(arpSpanBpItem));
         }                
         if (linkType == 2){
+            linkTypeStr = "ARP_Span&Split";
             sb.append("ARP_Span&Split;");            
             sb.append("ARP_SUP=");
             sb.append(supEvi[0]);
@@ -153,6 +161,7 @@ public class svOutInfo {
             
         }
         if (linkType == 3){
+            linkTypeStr = "Split";
             sb.append("Split;");
             sb.append("Split_SUP=");
             sb.append(supEvi[3]);
@@ -160,6 +169,7 @@ public class svOutInfo {
             sb.append(supEvi[4]);
         }
         if (linkType == 4){
+            linkTypeStr = "Self&Cross";
             sb.append("Self&Cross;");
             if (supEvi[0] != 0){
                 sb.append("ARP_SHARE=");
@@ -172,6 +182,7 @@ public class svOutInfo {
             
         }
         if (linkType == 5){
+            linkTypeStr = "Self&Split";
             sb.append("Self&Split;");            
             sb.append("ARP_SHARE=");
             sb.append(supEvi[0]);
@@ -181,7 +192,8 @@ public class svOutInfo {
             sb.append(supEvi[4]);
         }
         if (linkType == 6){
-            sb.append("Self&Split&Cross;");
+            linkTypeStr = "Self&Split&Cross";
+            sb.append("Self&Split&Cross");
             if (supEvi[0] != 0){
                 sb.append("ARP_SHARE=");
                 sb.append(supEvi[0]);                
@@ -196,6 +208,7 @@ public class svOutInfo {
             sb.append(supEvi[2]);
         }
         if (linkType == 7){
+            linkTypeStr = "Split&Cross";
             sb.append("Split&Cross;"); 
             sb.append("Split_SUP=");
             sb.append(supEvi[3]);
@@ -207,6 +220,7 @@ public class svOutInfo {
             sb.append(supEvi[2]);
         }
         if (linkType == 8){
+            linkTypeStr = "Cross";
             sb.append("Cross");            
             sb.append(";CROSS_LEN=");
             sb.append(supEvi[1]);            
@@ -214,11 +228,13 @@ public class svOutInfo {
             sb.append(supEvi[2]);
         }
         if(linkType == 9){
-            sb.append("ARP_INFER;");
+            linkTypeStr = "ARP_Infer";
+            sb.append("ARP_Infer;");
             sb.append("ARP_SUP=");
             sb.append(supEvi[1]);
         }
         if (linkType == 10){
+            linkTypeStr = "Realign";
             sb.append("Realign;");
             sb.append("AR=");
             sb.append(supEvi[0]);                      
@@ -229,11 +245,11 @@ public class svOutInfo {
         }
         
         sb.append(";Pattern=");
-        sb.append(pattern);                                             
+        sb.append(pattern);                         
+        sb.append(";Region=");
+        sb.append(intArrayToString(suspeticRegion));                           
         sb.append(";Weights=");
-        sb.append(intListToString(weights));        
-        sb.append(";Pos=");
-        sb.append(intListToString(postions));
+        sb.append(intListToString(weights));                
         sb.append(";Ratio=");
         sb.append(doubleListToString(ratios));
         sb.append(";Ori=");
@@ -293,10 +309,10 @@ public class svOutInfo {
         return outStr;
     }
     
-    public void setSvInfo(String patternStr, List<Integer> weights, List<Integer> posList, List<Double> ratios, List<String> oris){
+    public void setSvInfo(String patternStr, List<Integer> weights, int[] susRegion, List<Double> ratios, List<String> oris){
         pattern = patternStr;
         this.weights = weights;
-        this.postions = posList;
+        this.suspeticRegion = susRegion;
         this.ratios = ratios;
         this.oris = oris;
     }
@@ -364,26 +380,50 @@ public class svOutInfo {
     
   
     
-    public void writeVariantsOutput(BufferedWriter regionWriter, String chrName, StringBuilder sb) throws IOException{
-        if (end - start > 50){            
-            if(linkType == 1 && (arpSpanBpMapQ[0] > arpSpanBpWeight[0] * 20 && arpSpanBpMapQ[1] > arpSpanBpWeight[1] * 20)){
+    public void writeVariantsOutput(BufferedWriter regionWriter, BufferedWriter smallRegionWriter, String chrName, StringBuilder sb) throws IOException{
+        String svInfos = toString();
+        if (end - start < 50) {
+            
+            if (linkTypeStr.contains("Split")){
                 sb.append(chrName);
-                sb.append(toString());
+                sb.append(svInfos);
                 regionWriter.write(sb.toString());
-                regionWriter.newLine();
-            }            
-            else if (linkType != 1){
+                regionWriter.newLine(); 
+            } 
+            if (pattern.contains("ARP") && (linkTypeStr.contains("Self")||linkTypeStr.contains("Split"))){
+                start = suspeticRegion[0];
+                end = suspeticRegion[1];
+                
                 sb.append(chrName);
-                sb.append(toString());
+                sb.append(svInfos);
                 regionWriter.write(sb.toString());
-                regionWriter.newLine();
-            }            
+                regionWriter.newLine(); 
+            }                       
+            if (pattern.contains("ARP_SMALL_INSERT")){
+                start = suspeticRegion[0];
+                end = suspeticRegion[1];
+                
+                sb.append(chrName);
+                sb.append(svInfos);
+                regionWriter.write(sb.toString());
+                regionWriter.newLine(); 
+            }
         }
-        if (end == -1){
-            sb.append(chrName);
-            sb.append(toString());
-            regionWriter.write(sb.toString());
-            regionWriter.newLine();
-        }       
+        else{
+            if (end == -1){
+                sb.append(chrName);
+                sb.append(toString());
+                regionWriter.write(sb.toString());
+                regionWriter.newLine();
+                
+            }  else{
+                
+                sb.append(chrName);
+                sb.append(svInfos);
+                regionWriter.write(sb.toString());
+                regionWriter.newLine();
+            } 
+        }
+            
     }
 }
