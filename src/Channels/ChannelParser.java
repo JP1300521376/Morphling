@@ -203,7 +203,9 @@ public class ChannelParser {
         
         if (isARPchannel){          
             for (SuperItem si : superitems){
-
+                if(si.getPos() == 13999922){
+                    System.out.println(si.toConciseString());
+                }
                 String strOut = si.toString();
                 superitemWriter.write(strOut);
                 superitemWriter.newLine();   
@@ -218,8 +220,11 @@ public class ChannelParser {
                 superitemWriter.newLine();            
             }       
             superitems.clear();
-            for (SuperItem item : unSetSuperitems){
-                superitems.add(item);
+            for (SuperItem si : unSetSuperitems){
+                if(si.getPos() == 13999922){
+                    System.out.println(si.toConciseString());
+                }
+                superitems.add(si);
             }
             unSetSuperitems.clear();
             SuperItemCount = 0;
@@ -278,7 +283,8 @@ public class ChannelParser {
                 if (cluster.size() < 3){
                     cluster.clear();
                 }else{                    
-                    SuperItem superItem = new SuperItem(cluster);                    
+                    SuperItem superItem = new SuperItem(cluster);       
+                    
 //                    superitemList.add(superItem);
                     addSuperItem(superItem);
                     cluster.clear();

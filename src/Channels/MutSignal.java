@@ -35,12 +35,13 @@ public class MutSignal implements Comparable<MutSignal>{
     protected int recordMatePos;
     protected String cigarString;
     protected int mapQ;
+    protected String signalMateRefName;
         
     protected boolean isARP = false;
     protected boolean isSplitAlign = false;
+    protected boolean isInterChrom = false;
     protected int splitAlignPos;
     protected String splitAlignChr;
-//    protected String splitAlignInfo;
     protected String readSequence;
     protected int[] clippedStatus;
     protected int longestD;
@@ -56,14 +57,11 @@ public class MutSignal implements Comparable<MutSignal>{
     
     public MutSignal(SAMRecord record, String signalType, int pos, String ori){
         
-        if (record.isSecondaryAlignment()){
-            isSplitAlign = true;
-            splitAlignPos = decodeSplitAlign(record.getAttribute("SA").toString());
-//            splitAlignInfo = record.getAttribute("SA").toString();
-        }
+        
         queryName = record.getReadName();        
         signalRefIndex = record.getReferenceIndex();
         signalRefName = record.getReferenceName();
+        signalMateRefName = record.getMateReferenceName();                       
         insertSize = Math.abs(record.getInferredInsertSize());
         mutSignalType = signalType;
         mutSignalPos = pos;
@@ -80,7 +78,13 @@ public class MutSignal implements Comparable<MutSignal>{
         
         if (mutSignalType.contains("ARP")){
             isARP = true;
-        }                    
+        }   
+        if (record.isSecondaryAlignment()){           
+            splitAlignPos = decodeSplitAlign(record.getAttribute("SA").toString());            
+        }
+        if (!signalRefName.equals(signalMateRefName)){
+            isInterChrom = true;
+        } 
     }
     @Override
     public boolean equals(Object obj){
@@ -160,6 +164,9 @@ public class MutSignal implements Comparable<MutSignal>{
     public boolean isSplitAlign(){
         return isSplitAlign;
     }
+    public boolean isInterChrom(){
+        return isInterChrom;
+    }
     public int getMutPos(){
         return mutSignalPos;
     }
@@ -187,15 +194,19 @@ public class MutSignal implements Comparable<MutSignal>{
     private int decodeSplitAlign(String splitAlignString){
         
         String[] tokens = splitAlignString.split(",");        
-        List<myCigarOp> cigarOps = getSplitAlignPosFromCigarString(tokens[3]);
-//        String ori = tokens[2];
+        splitAlignChr = tokens[0];
         int pos = Integer.parseInt(tokens[1]);
         
-        myCigarOp firstOp = cigarOps.get(0);
-        if (firstOp.getOp().equals("M")){
-            pos += firstOp.getOpLength();
-        }
-        
+        if (splitAlignChr.equals(signalRefName)){
+            isSplitAlign = true;
+            List<myCigarOp> cigarOps = getSplitAlignPosFromCigarString(tokens[3]);                    
+            myCigarOp firstOp = cigarOps.get(0);
+            if (firstOp.getOp().equals("M")){
+                pos += firstOp.getOpLength();
+            }      
+        }else{
+            pos = -1;
+        }          
         return pos;
     }
     public List<myCigarOp> getSplitAlignPosFromCigarString(String cigar){

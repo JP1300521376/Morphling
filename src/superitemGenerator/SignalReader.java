@@ -98,8 +98,7 @@ public class SignalReader {
         isizeLargeChannel = new ChannelParser(clusteringDist, "isize_large", abnormalSigOut);
         isizeSmallChannel = new ChannelParser(clusteringDist, "isize_small", abnormalSigOut);
         oemChannel = new ChannelParser(clusteringDist, "oem", abnormalSigOut);
-        oriChannel = new ChannelParser(clusteringDist, "ori", abnormalSigOut);
-        
+        oriChannel = new ChannelParser(clusteringDist, "ori", abnormalSigOut);        
         
         if (!superitemOutPath.isEmpty()){
             createSuperItemWriter(superitemOutPath);            
@@ -136,7 +135,7 @@ public class SignalReader {
                         
             
             if (regionStart != 0 && regionEnd != 0){
-                refSequenceLength = regionStart - regionEnd + 1;
+                refSequenceLength = regionEnd - regionStart + 1;
                 if (refSequenceLength <= readDepthContainerBuffer){
                     nWindows = 1;
                     readDepthContainerBuffer = refSequenceLength;
@@ -252,33 +251,24 @@ public class SignalReader {
             int isGoodAlign = exactAlignment(cigarElements);
             if (isGoodAlign != -1){
                 updateReadDepthArray(record.getAlignmentStart(), isGoodAlign, windowStart);
-            }                        
-            if (!isInterChrom(record)){                
-                
-                SEClippedParser(record, cigarElements, cigarOper);   
-                RPUnmappedParser(record);
-                int incorrectSize = RPisizeParser(record, cigarElements);
-
-                if (!rpTracker.containsKey(record.getReadName())){
-                    List<SAMRecord> records = new ArrayList<>();
-                    records.add(record);
-                    rpTracker.put(record.getReadName(), records);
-                }else{
-                    List<SAMRecord> records = rpTracker.get(record.getReadName());
-                    records.add(record);
-                    numOfRPs += 1;
-                    int incorrectOri = RPoriParser(records, cigarElements);
-                    if (incorrectOri == -1){
-//                        oriChannel.updateNumOfARPs();
-                        numOfARPs += 1;
-                    }
-                    if (incorrectSize == -1){
-//                        isizeLargeChannel.updateNumOfARPs();
-                        numOfARPs += 1;
-                    }
-                    rpTracker.remove(record.getReadName());
-                }                
-            }
+            }                                      
+           
+            SEClippedParser(record, cigarElements, cigarOper);   
+            RPUnmappedParser(record);
+            RPisizeParser(record, cigarElements);
+            
+            if (!rpTracker.containsKey(record.getReadName())){
+                List<SAMRecord> records = new ArrayList<>();
+                records.add(record);
+                rpTracker.put(record.getReadName(), records);
+            }else{
+                List<SAMRecord> records = rpTracker.get(record.getReadName());
+                records.add(record);
+                numOfRPs += 1;
+                RPoriParser(records, cigarElements);
+                rpTracker.remove(record.getReadName());
+            }                
+            
             
         } 
         iterator.close();
@@ -343,18 +333,18 @@ public class SignalReader {
         }
         
     }
-    private int isOverlapRP(List<SAMRecord> records){
-        int overlap = -1;
-        SAMRecord leftMostAlign = records.get(0);
-        int leftMostAlignStart = leftMostAlign.getAlignmentStart();
-        SAMRecord mateAlign = records.get(1);
-        int mateAlignStart = mateAlign.getAlignmentStart();
-        int tmp = mateAlignStart - leftMostAlignStart;
-        if (tmp < readLen){
-            overlap = tmp;
-        }
-        return overlap;
-    }   
+//    private int isOverlapRP(List<SAMRecord> records){
+//        int overlap = -1;
+//        SAMRecord leftMostAlign = records.get(0);
+//        int leftMostAlignStart = leftMostAlign.getAlignmentStart();
+//        SAMRecord mateAlign = records.get(1);
+//        int mateAlignStart = mateAlign.getAlignmentStart();
+//        int tmp = mateAlignStart - leftMostAlignStart;
+//        if (tmp < readLen){
+//            overlap = tmp;
+//        }
+//        return overlap;
+//    }   
     /**
      * Process soft clipped reads
      * @param record
@@ -385,8 +375,6 @@ public class SignalReader {
                 
                 String ori = record.getReadNegativeStrandFlag() ? "-" : "+";                               
                 MutSignal mutSignal = new MutSignal(record, cigarStr, mutCoord, ori);
-//                MutSignal mutSignal = new MutSignal(record.getReadName(), record.getReferenceIndex(), record.getReferenceName(), 
-//                        record.getInferredInsertSize(), cigarStr, mutCoord, ori, record.getAlignmentStart(), record.getMateAlignmentStart());
                 mutSignal.setIsizeNormal(isizeUpper, isizeLower);
 
                 breakChannel.addSignals(mutSignal, fragMean, readLen);
@@ -394,13 +382,14 @@ public class SignalReader {
         }
         
     }
+    
      /**
      * One end unmapped read
      * @param record
      * @return 
      */
-    private int RPUnmappedParser(SAMRecord record){
-        int isUnmappd = 0;
+    private void RPUnmappedParser(SAMRecord record){
+        
         // read unmapped
         if (record.getReadUnmappedFlag()){
             int mutCoord = record.getMateAlignmentStart();
@@ -410,30 +399,28 @@ public class SignalReader {
             mutSignal.setIsizeNormal(isizeUpper, isizeLower);
            
             oemChannel.addSignals(mutSignal, fragMean, readLen);
-            isUnmappd = -1;
-//            oemChannel.addSignalsTest(mutSignal);
+            numOfARPs += 1;
+
         }else if (record.getMateUnmappedFlag()){
             int mutCoord = record.getMateAlignmentStart();
             String ori = record.getMateNegativeStrandFlag() ? "-": "+";
             
             MutSignal mutSignal = new MutSignal(record, "ARP_OEM", mutCoord, ori);
-//                MutSignal mutSignal = new MutSignal(record.getReadName(), record.getReferenceIndex(), record.getReferenceName(), 
-//                        record.getInferredInsertSize(), "ARP_OEM", mutCoord, ori, record.getAlignmentStart(), record.getMateAlignmentStart());
             mutSignal.setIsizeNormal(isizeUpper, isizeLower);
-            
-            
+                        
             oemChannel.addSignals(mutSignal, fragMean, readLen);
-            isUnmappd = -1;
-            
-//            oemChannel.addSignalsTest(mutSignal);
+            numOfARPs += 1;
         }
-        return isUnmappd;
+
     }
-    
-    private int RPisizeParser(SAMRecord record, List<CigarElement> cigarElements){
+    /**
+     * Process PE of abnormal insert size
+     * @param record
+     * @param cigarElements 
+     */
+    private void RPisizeParser(SAMRecord record, List<CigarElement> cigarElements){
         // only process read-pair mapped on the same chrom.
-        
-        int incorrectSize = 0;
+       
         CigarElement leftMostCigarElement = cigarElements.get(0);
         String leftMostCigarOperator = leftMostCigarElement.getOperator().toString();
 
@@ -452,9 +439,8 @@ public class SignalReader {
 //            MutSignal mutSignal = new MutSignal(record.getReadName(), record.getReferenceIndex(), record.getReferenceName(), 
 //                        record.getInferredInsertSize(), "ARP_LARGE_INSERT", mutCoord, ori, record.getAlignmentStart(), record.getMateAlignmentStart());
             mutSignal.setIsizeNormal(isizeUpper, isizeLower);
-            isizeLargeChannel.addSignals(mutSignal, fragMean, readLen);
-            incorrectSize = -1;
-//                isizeLargeChannel.addSignalsTest(mutSignal);
+            isizeLargeChannel.addSignals(mutSignal, fragMean, readLen);            
+            numOfARPs += 1;
         }
         else if (Math.abs(insertSize) <= isizeLower && insertSize != 0){
 
@@ -464,15 +450,18 @@ public class SignalReader {
             mutSignal.setIsizeNormal(isizeUpper, isizeLower);
 
             isizeSmallChannel.addSignals(mutSignal, fragMean, readLen); 
-//                isizeSmallChannel.addSignalsTest(mutSignal);
-            incorrectSize = -1;
+            numOfARPs += 1;
+            
         }
-        return incorrectSize;
-        
+                
     }
-    
-    private int RPoriParser(List<SAMRecord> records, List<CigarElement> cigarElements){
-        int incorrectOri = 0;
+    /**
+     * Process PE of abnormal alignment orientation
+     * @param records
+     * @param cigarElements 
+     */
+    private void RPoriParser(List<SAMRecord> records, List<CigarElement> cigarElements){
+        
         SAMRecord leftMostRecord = records.get(0);
         SAMRecord rightMostRecord = records.get(records.size() - 1);
         // For read-pair, it should be proper paired. Its read and mate are all mapped.
@@ -493,40 +482,29 @@ public class SignalReader {
                     mutType = "ARP_FF";
                 }
                 MutSignal readMutSignal = new MutSignal(leftMostRecord, mutType, mutCoord, ori);
-//                MutSignal readMutSignal = new MutSignal(leftMostRecord.getReadName(), leftMostRecord.getReferenceIndex(), leftMostRecord.getReferenceName(), 
-//                        leftMostRecord.getInferredInsertSize(), mutType, mutCoord, ori, leftMostRecord.getAlignmentStart(), leftMostRecord.getMateAlignmentStart());
                 readMutSignal.setIsizeNormal(isizeUpper, isizeLower);
 
                 MutSignal mateMutSignal = new MutSignal(leftMostRecord, mutType, rightMostRecord.getMateAlignmentStart(), ori);
-//                MutSignal mateMutSignal = new MutSignal(leftMostRecord.getReadName(), leftMostRecord.getReferenceIndex(), leftMostRecord.getReferenceName(), 
-//                        leftMostRecord.getInferredInsertSize(), mutType, mutCoord, ori, leftMostRecord.getAlignmentStart(), leftMostRecord.getMateAlignmentStart());
                 mateMutSignal.setIsizeNormal(isizeUpper, isizeLower);   
 
                 oriChannel.addSignals(readMutSignal, fragMean, readLen);
                 oriChannel.addSignals(mateMutSignal, fragMean, readLen);
-                incorrectOri = -1;
+                numOfARPs += 1;
             }
-            else if (leftMostRecord.getReadNegativeStrandFlag() && !leftMostRecord.getMateNegativeStrandFlag() && isOverlapRP(records) == -1){
+            else if (leftMostRecord.getReadNegativeStrandFlag() && !leftMostRecord.getMateNegativeStrandFlag()){
                 String mutType = "ARP_RF";
 
                 MutSignal readMutSignal = new MutSignal(leftMostRecord, mutType, mutCoord, "-");
-//                MutSignal readMutSignal = new MutSignal(leftMostRecord.getReadName(), leftMostRecord.getReferenceIndex(), leftMostRecord.getReferenceName(), 
-//                        leftMostRecord.getInferredInsertSize(), mutType, mutCoord, "-", leftMostRecord.getAlignmentStart(), leftMostRecord.getMateAlignmentStart());
                 readMutSignal.setIsizeNormal(isizeUpper, isizeLower);
-
-//                oriChannel.addSignalsTest(readMutSignal);
                 MutSignal mateMutSignal = new MutSignal(leftMostRecord, mutType, rightMostRecord.getMateAlignmentStart(), "+");
-//                MutSignal mateMutSignal = new MutSignal(leftMostRecord.getReadName(), leftMostRecord.getReferenceIndex(), leftMostRecord.getReferenceName(), 
-//                leftMostRecord.getInferredInsertSize(), mutType, mutCoord, "-", leftMostRecord.getAlignmentStart(), leftMostRecord.getMateAlignmentStart());
                 mateMutSignal.setIsizeNormal(isizeUpper, isizeLower);
 
                 oriChannel.addSignals(readMutSignal, fragMean, readLen);
                 oriChannel.addSignals(mateMutSignal, fragMean, readLen);
-//                oriChannel.addSignalsTest(mateMutSignal);
-                incorrectOri = -1;
+
+                numOfARPs += 1;
             }
-        }
-        return incorrectOri;
+        }       
     }
 
     
@@ -534,14 +512,6 @@ public class SignalReader {
         return idxToChromMap;
     } 
     
-    private boolean isInterChrom(SAMRecord record){
-        
-        if (!record.getReferenceName().equals(record.getMateReferenceName())){
-            return true;
-        }
-        else return false;
-    }
-
     private SamReader openBAMReader(String bamFile, ValidationStringency stringency, boolean includeFileSource) throws IOException{
         SamReaderFactory samReaderFactory = SamReaderFactory.makeDefault().validationStringency(stringency).enable(SamReaderFactory.Option.DONT_MEMORY_MAP_INDEX);
         if(includeFileSource){
@@ -585,6 +555,7 @@ public class SignalReader {
         isizeSmallChannel.processFinalSignals(fragMean, readLen);
         oemChannel.processFinalSignals(fragMean, readLen);
         oriChannel.processFinalSignals(fragMean, readLen);
+//        interChromChannel.processFinalSignals(fragMean, readLen);
                              
     }
     
@@ -595,6 +566,7 @@ public class SignalReader {
             isizeSmallChannel.writeSuperItemsInChannel(writer);
             oemChannel.writeSuperItemsInChannel(writer);
             oriChannel.writeSuperItemsInChannel(writer);
+//            interChromChannel.writeSuperItemsInChannel(writer);
         }
         
     }
@@ -611,19 +583,22 @@ public class SignalReader {
         isizeSmallChannel.setARPSuperItemRatio(readDepthContainer, windowStart, windowSize, preReadDepthBuffer);
         oriChannel.setARPSuperItemRatio(readDepthContainer, windowStart, windowSize, preReadDepthBuffer);
         oemChannel.setARPSuperItemRatio(readDepthContainer, windowStart, windowSize, preReadDepthBuffer);
+//        interChromChannel.setARPSuperItemRatio(readDepthContainer, windowStart, windowSize, preReadDepthBuffer);
         
-        int superitemCount = 0;
-        superitemCount += breakChannel.getSuperitemCount();
-        superitemCount += isizeLargeChannel.getSuperitemCount();
-        superitemCount += isizeSmallChannel.getSuperitemCount();
-        superitemCount += oemChannel.getSuperitemCount();
-        superitemCount += oriChannel.getSuperitemCount();
+        int curWindowSuperItem = 0;
+        curWindowSuperItem += breakChannel.getSuperitemCount();
+        curWindowSuperItem += isizeLargeChannel.getSuperitemCount();
+        curWindowSuperItem += isizeSmallChannel.getSuperitemCount();
+        curWindowSuperItem += oemChannel.getSuperitemCount();
+        curWindowSuperItem += oriChannel.getSuperitemCount();
+//        curWindowSuperItem += interChromChannel.getSuperitemCount();
         
-        return superitemCount;
+        
+        return curWindowSuperItem;
     }
     private void createSuperItemWriter(String superitemOutPath) throws IOException{
         writer = new BufferedWriter(new FileWriter(superitemOutPath));
-        writer.write("type\tchromIdx\tnread\tpos\tsplitAlignPos\tori\tweight\tratio\tsumMapQ\tplusRead\tminusRead\tsplitRead\tsplitMapQ\tregion\tmateRegion\tqnames\tmConsensus\tcConsensus\n");
+        writer.write("type\tchromIdx\tnread\tpos\tsaPos\tori\tweight\tratio\tsumMapQ\tplusRead\tminusRead\tsplitRead\tsplitMapQ\titxRead\tregion\tmateRegion\tqnames\tmConsensus\tcConsensus\n");
 
     }
     

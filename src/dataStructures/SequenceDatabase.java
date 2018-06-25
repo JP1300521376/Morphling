@@ -26,9 +26,9 @@ public class SequenceDatabase {
     private long endTime;
     
     /** saves all sequences */
-    private final List<Sequence> sequences = new ArrayList<Sequence>();
-    List<List<SuperItem>> superitemInput = new ArrayList<>();
-    Map<Integer, String> seqChromMap = new HashMap<>();
+    private final List<Sequence> sequences = new ArrayList<>();
+    
+    
     
 //    private double weightRatioThresh = 0.2;                 
     
@@ -41,31 +41,34 @@ public class SequenceDatabase {
     public void loadSequencesFromFile(String superitemFilePath, BufferedWriter svRegionWriter) throws IOException{
 //        System.out.println("Start loading mutational database.....");
         System.out.println("\nLoading SuperItem sequence database and formatting...");
+        
+        List<List<SuperItem>> superitemInput = new ArrayList<>();
+        Map<String, Integer> seqChromMap = new HashMap<>();
+        
         String thisLine;
         startTime = System.currentTimeMillis();
-        MemoryLogger.getInstance().reset();                        
-        BufferedReader myInput = null;
-        
+        MemoryLogger.getInstance().reset();                                        
             
         FileInputStream fin = new FileInputStream(new File(superitemFilePath));
-        myInput = new BufferedReader(new InputStreamReader(fin));
+        BufferedReader myInput = new BufferedReader(new InputStreamReader(fin));
                     
         // skip header
         myInput.readLine();
-        int curSeq = -1;
+        int curSeqIdx = -1;
         while((thisLine = myInput.readLine()) != null){
             String[] tokens = thisLine.split("\t");                  
             String SuperItemType = tokens[0];
             String chrom = tokens[1];
+
 //            int weight = Integer.parseInt(tokens[6]);
 //            int sumMapQ = Integer.parseInt(tokens[8]);
-            int ChromIdx = Integer.parseInt(chrom);
-            if (!seqChromMap.containsKey(ChromIdx)){
-                curSeq = superitemInput.size();
+            
+            if (!seqChromMap.containsKey(chrom)){
+                curSeqIdx = superitemInput.size();
                 superitemInput.add(new ArrayList<>());
-                seqChromMap.put(superitemInput.size() - 1, chrom);                   
+                seqChromMap.put(chrom, superitemInput.size() - 1);                   
             }else{
-                curSeq = ChromIdx;
+                curSeqIdx = superitemInput.size() - 1;
             }
             double ratio = Double.parseDouble(tokens[7]);
      
@@ -75,13 +78,13 @@ public class SequenceDatabase {
             }
             if (!SuperItemType.contains("ARP")&& (ratio > 0.1)){               
                 SuperItem superitem = new SuperItem(tokens);
-                superitem.setChromName(seqChromMap.get(curSeq));
-                superitemInput.get(curSeq).add(superitem);
+                superitem.setChromName(chrom);
+                superitemInput.get(curSeqIdx).add(superitem);
 
             }else if (SuperItemType.contains("ARP") && (ratio > 0.1)){   
                 SuperItem superitem = new SuperItem(tokens);
-                superitem.setChromName(seqChromMap.get(curSeq));
-                superitemInput.get(curSeq).add(superitem);
+                superitem.setChromName(chrom);
+                superitemInput.get(curSeqIdx).add(superitem);
             }               
         }
 //        indelWriter.close();

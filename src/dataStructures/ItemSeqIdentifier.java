@@ -38,5 +38,18 @@ public class ItemSeqIdentifier {
     public int getItemIdx(){
         return this.itemIdx;
     }
+    public SuperItem getSuperItem(SequenceDatabase database){
+        return database.getSequenceByID(seqID).getItemsets().get(itemSetIdx).get(itemIdx);
+    }
     
+    @Override
+    public String toString(){
+        StringBuilder sb = new StringBuilder();
+        sb.append(seqID);
+        sb.append(",");
+        sb.append(itemSetIdx);
+        sb.append(",");
+        sb.append(itemIdx);
+        return sb.toString();
+    }
 }

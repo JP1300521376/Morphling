@@ -151,7 +151,12 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
     public int[] getSplitAlignCoords(){
         return splitAlignCoords;
     }
-    
+    public int getPatternLeftMostPos(){
+        return patternLeftMostPos;
+    }
+    public int getPatternRightMostPos(){
+        return patternRightMostPos;
+    }
     public boolean isCrossSup(){
         return crossSupInfo[0] > 0 && crossSupInfo[1] > 0 && crossSupInfo[2] > 30;
     }
@@ -181,8 +186,8 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
     public int getNumOfBPs(){
         return numOfBPs;
     }
-    public List<pseudoSuperItem> getMSSuperItems(){
-        return MSSuperItems;
+    public List<pseudoSuperItem> getSuperItems(){
+        return superitems;
     }
     public boolean hasArpSuperItem(){
         return !ARPSuperItems.isEmpty();
@@ -238,6 +243,7 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
     
     public String toString(SequenceDatabase database){
         StringBuilder sb = new StringBuilder();
+        
         for (pseudoSuperItem item : superitems){
             SuperItem superitem = item.getSuperItem(database);
             sb.append('(');
@@ -269,18 +275,7 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
         return superItemsList;
     }
     
-    public boolean splitAlignLink(SequenceDatabase database, pseudoSequentialPattern matePattern, int[] expectedCoords){
-        boolean isLinked = false;               
-        List<pseudoSuperItem> mateMsSuperItems = matePattern.getMSSuperItems();
-        for (int i = 0; i < mateMsSuperItems.size(); i++){
-            SuperItem superItem = mateMsSuperItems.get(i).getSuperItem(database);
-            if (superItem.getPos() == expectedCoords[1] || superItem.getPos() == expectedCoords[0]){
-                isLinked = true;
-                break;
-            }
-        }               
-        return isLinked;
-    }
+
     
     public List<svOutInfo> doLocalAlign(SequenceDatabase database, String refSeqString, int refRegionLeft){
                 
@@ -309,9 +304,16 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
         return svFromLocalAlign;
     }
     
-    
+    /**
+     * pattern linked from split aligned reads
+     * -3: inproper split align, split aligned pos either not in the pattern or in another pattern
+     * -2: proper split align, where pos and split aligned pos are within the pattern spanned region
+     * >0: split aligned pos is in another pattern
+     * @param database
+     * @return 
+     */
     public int getSplitStatus(SequenceDatabase database){
-        int splitStatus = -3;
+        int splitStatus;
         
         if (splitAlignLeftMatch >= 0 && splitAlignRightMatch >= 0){
             splitStatus = -2;
@@ -361,28 +363,26 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
         else if(splitAlignMate > 0){
             splitStatus = splitAlignMate;
         }else{
-            splitStatus = -1;
-            if (splitAlignCoords[0] < patternLeftMostPos || splitAlignCoords[1] > patternRightMostPos){
-                splitStatus = -3;
-            }
+            splitStatus = -3;
         }
         return splitStatus;
     }
-    
-    public void splitAlignCheck(SequenceDatabase database, List<pseudoSequentialPattern> patternCandidates, Map<Integer, Integer> patternIdx, int[] splitAlignPos){                 
-//        boolean leftBPMatched = false;
-//        boolean rightBPMatched = false;
-        
-        // Link status is set to -1 by default, which indicates none linkage.
-//        int linkStatus = -1;        
+    private boolean arpLinkedPatternSplitStatus(int[] splitCoords, pseudoSequentialPattern matePattern){
+        int linkedPatternLeftPos = patternLeftMostPos < matePattern.patternLeftMostPos ? patternLeftMostPos : matePattern.patternLeftMostPos;
+        int linkedPatternRightPos = patternRightMostPos > matePattern.patternRightMostPos ? patternRightMostPos : matePattern.patternRightMostPos;
+        boolean splitStatus = false;
+        if (splitCoords[0] > linkedPatternLeftPos && splitCoords[1] < linkedPatternRightPos){
+            splitStatus = true;
+        }
+        return splitStatus;
+    }
+    public void splitAlignCheck(SequenceDatabase database, List<pseudoSequentialPattern> patternCandidates, Map<Integer, Integer> patternIdx, int[] splitAlignPos){                         
         
         splitAlignCoords = splitAlignPos;
         for (int i = 0; i < superitems.size(); i++){            
             pseudoSuperItem psSuperItem = superitems.get(i);           
             SuperItem superItem = psSuperItem.getSuperItem(database);
             if (superItem.getPos() == splitAlignCoords[0]){
-//                leftBPMatched = true;
-//                break;
                 splitAlignLeftMatch = i;
             }            
         }
@@ -391,24 +391,41 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
             SuperItem superItem = psSuperItem.getSuperItem(database);
 
             if (superItem.getPos() == splitAlignCoords[1]){
-//                rightBPMatched = true;
-//                break;
                 splitAlignRightMatch = i;
             }
         }
-
-        if (splitAlignLeftMatch == -1 || splitAlignRightMatch == -1){
-            Set<Integer> unlinkablePatternIdx = patternIdx.keySet();
-            for (Integer idx : unlinkablePatternIdx){
-                pseudoSequentialPattern matePattern = patternCandidates.get(idx);
-                
-                boolean islinked = splitAlignLink(database, matePattern, splitAlignCoords);
-                if (islinked){
-                    splitAlignMate = idx;
-                    break;
-                }
+        
+//        if (splitAlignLeftMatch == -1 || splitAlignRightMatch == -1){            
+//            for (int i = 0; i < patternCandidates.size() - 1; i++){
+//                if (patternIdx.containsKey(i)){
+//                    continue;
+//                }
+//                pseudoSequentialPattern matePattern = patternCandidates.get(i);                
+//                boolean islinked = splitAlignLink(database, matePattern, splitAlignCoords);
+//                if (islinked){
+//                    splitAlignMate = i;
+//                    break;
+//                }
+//            }
+//        }
+    }
+    public boolean splitAlignLink(SequenceDatabase database, pseudoSequentialPattern matePattern, int[] expectedCoords){
+//        boolean isSplitAlignLinked = false;               
+        List<pseudoSuperItem> mateSuperItems = matePattern.getSuperItems();
+        boolean onePartLinked = false;
+        boolean otherPartLinked = false;
+        if ((expectedCoords[1] > matePattern.patternLeftMostPos && expectedCoords[1] < matePattern.patternRightMostPos)
+                || (expectedCoords[0] > matePattern.patternLeftMostPos && expectedCoords[0] < matePattern.patternRightMostPos)){
+            onePartLinked = true;
+        }        
+        
+        for (int i = 0; i < mateSuperItems.size(); i++){
+            SuperItem item = mateSuperItems.get(i).getSuperItem(database);
+            if (item.getSplitAlignPos() > expectedCoords[0] && item.getSplitAlignPos() < expectedCoords[1]){
+                otherPartLinked = true;
             }
-        }
+        }               
+        return onePartLinked&&otherPartLinked;
     }
     /**
      * A pattern is self-linked by discordant read-pairs
@@ -531,23 +548,23 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
         return mergedSuperitems;            
     }
     /**
-     * Estimate breakpoints of two linked patterns
+     * Estimate breakpoints of two arp linked patterns
      * @param matePattern
      * @param database
      * @return 
      */
-    public int[] estimateBreakpointPos(pseudoSequentialPattern matePattern, SequenceDatabase database){
+    public int[] arpLinkedPatternBp(pseudoSequentialPattern matePattern, SequenceDatabase database){
         // First check the split alignment info on both side
-        int[] tmpCoords = splitAlignForBP(database);
+        if (arpLinkedPatternSplitStatus(splitAlignCoords, matePattern)){
+            arpSpanUseSplit = true;
+            return splitAlignCoords;
+        }
         int[] coords = new int[2];
         arpSpanBpMapQ = new int[2];
         arpSpanBpWeight = new int[2];
         arpSpanBPItem = new String[2];
         
         // Process the patten ahead.
-        int rightMostARPsuperitemIdx = -1;
-        String ARPsuperItemOri = "";
-        int ARPsuperItemPos = 0;
         for (int k = patternLength - 1; k >=0 ;k--){
             SuperItem superitem = getSuperItemFromOriginal(database, k);
             if (superitem.isARPsuperitem()){
@@ -555,203 +572,24 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
                 arpSpanBpMapQ[0] = superitem.getSumMapQ();
                 arpSpanBpWeight[0] = superitem.getWeight();
                 arpSpanBPItem[0] = superitem.getType();
-                rightMostARPsuperitemIdx = k;
-                ARPsuperItemOri = superitem.getOri();
-                ARPsuperItemPos = superitem.getPos();
-                break;
+
+                arpLinkedBpHelper(false, 100, k, superitem.getPos(), superitem.getOri(), 
+                        database, coords, arpSpanBpMapQ, arpSpanBpWeight, arpSpanBPItem);                
             }
         }        
-        if (ARPsuperItemOri.equals("+")){
-//            int closestBP = 500;
-            int closestBP = 100;
-            if (rightMostARPsuperitemIdx < patternLength){
-                for (int i = rightMostARPsuperitemIdx; i < patternLength; i ++){
-                    SuperItem superitem = getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("MS")){
-//                        coords[0] = superitem.getPos();
-                        int dist = Math.abs(superitem.getPos() - ARPsuperItemPos);
-                        arpSpanBpMapQ[0] = superitem.getSumMapQ();
-                        arpSpanBpWeight[0] = superitem.getWeight();
-                        arpSpanBPItem[0] = superitem.getType();
-                        if (dist < closestBP){
-                            closestBP = dist;
-                            coords[0] = superitem.getPos();                            
-                        }
-                        if (coords[0] == tmpCoords[0]){                                                        
-                            arpSpanUseSplit = true;
-                            return tmpCoords;
-                        }
-                        break;
-                    }
-                }
-            }if(rightMostARPsuperitemIdx > 0){
-                for (int i = rightMostARPsuperitemIdx; i>=0 ; i--){
-                    SuperItem superitem = getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("MS")){
-                        int dist = Math.abs(superitem.getPos() - ARPsuperItemPos);
-                        if (dist < closestBP){                            
-                            coords[0] = superitem.getPos();
-                            arpSpanBpMapQ[0] = superitem.getSumMapQ();
-                            arpSpanBpWeight[0] = superitem.getWeight();
-                            arpSpanBPItem[0] = superitem.getType();
-                            if (coords[0] == tmpCoords[0]){
-                                arpSpanUseSplit = true;
-                                return tmpCoords;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-            
-        }else{
-//            int closestBP = 500;
-            int closestBP = 100;
-            if (rightMostARPsuperitemIdx < patternLength){
-                for (int i = rightMostARPsuperitemIdx; i < patternLength; i ++){
-                    SuperItem superitem = getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("SM")){
-//                        coords[0] = superitem.getPos();
-                        int dist = Math.abs(superitem.getPos() - ARPsuperItemPos);
-                        arpSpanBpMapQ[0] = superitem.getSumMapQ();
-                        arpSpanBpWeight[0] = superitem.getWeight();
-                        arpSpanBPItem[0] = superitem.getType();
-                        if (dist < closestBP){
-                            closestBP = dist;
-                            coords[0] = superitem.getPos();
-                        }
-                        if (coords[0] == tmpCoords[0]){
-                            arpSpanUseSplit = true;
-                            return tmpCoords;
-                        }
-                        break;
-                    }
-                }
-            }if(rightMostARPsuperitemIdx > 0){
-                for (int i = rightMostARPsuperitemIdx; i>=0 ; i--){
-                    SuperItem superitem = getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("SM")){
-                        int dist = Math.abs(superitem.getPos() - ARPsuperItemPos);
-                        if (dist < closestBP){                            
-                            coords[0] = superitem.getPos();
-                            arpSpanBpMapQ[0] = superitem.getSumMapQ();
-                            arpSpanBpWeight[0] = superitem.getWeight(); 
-                            arpSpanBPItem[0] = superitem.getType();
-                            if (coords[0] == tmpCoords[0]){
-                                arpSpanUseSplit = true;
-                                return tmpCoords;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Process the mate pattern
-        int leftMostARPsuperitemIdx = -1;
+
+        // Process the mate pattern        
         int matePatternLength = matePattern.patternLength;
-        String mateARPsuperItemOri = "";
-        int mateARPsuperItemPos = 0;
         for (int k = 0; k < matePatternLength; k ++){
             SuperItem superitem = matePattern.getSuperItemFromOriginal(database, k);
             if (superitem.isARPsuperitem()){
-                leftMostARPsuperitemIdx = k;
-                mateARPsuperItemOri = superitem.getOri();
                 coords[1] = superitem.getPos();
                 arpSpanBpMapQ[1] = superitem.getSumMapQ();
                 arpSpanBpWeight[1] = superitem.getWeight();
                 arpSpanBPItem[1] = superitem.getType();
-                mateARPsuperItemPos = superitem.getPos();
-                break;
-            }
-        }
-        if (mateARPsuperItemOri.equals("-")){
-//            int closestBP = 500;
-            int closestBP = 100;
-            if (leftMostARPsuperitemIdx > 0){
-                for (int i = leftMostARPsuperitemIdx; i >= 0; i--){
-                    SuperItem superitem = matePattern.getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("SM")){
-//                        coords[1] = superitem.getPos();
-                        int dist = Math.abs(mateARPsuperItemPos - superitem.getPos());
-                        arpSpanBpMapQ[1] = superitem.getSumMapQ();
-                        arpSpanBpWeight[1] = superitem.getWeight();
-                        arpSpanBPItem[1] = superitem.getType();
-                        if (dist < closestBP){
-                            closestBP = dist;
-                            coords[1] = superitem.getPos();                           
-                        }
-                        if (coords[1] == tmpCoords[1]){
-                            arpSpanUseSplit = true;
-                            return tmpCoords;
-                        }
-                        break;
-                    }
-                }
-            }
-            if (leftMostARPsuperitemIdx < matePatternLength){
-                for (int i = leftMostARPsuperitemIdx; i < matePatternLength; i++){
-                    SuperItem superitem = matePattern.getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("SM")){
-                        int dist = Math.abs(mateARPsuperItemPos - superitem.getPos());
-                        if (dist < closestBP){
-                            coords[1] = superitem.getPos();
-                            arpSpanBpMapQ[1] = superitem.getSumMapQ();
-                            arpSpanBpWeight[1] = superitem.getWeight();
-                            arpSpanBPItem[1] = superitem.getType();
-                            if (coords[1] == tmpCoords[1]){
-                                arpSpanUseSplit = true;
-                                return tmpCoords;
-                            }
-                            break;
-                        }
-                        
-                    }
-                }
-            }
-        }else{
-//            int closestBP = 500;
-            int closestBP = 100;
-            if (leftMostARPsuperitemIdx > 0){
-                for (int i = leftMostARPsuperitemIdx; i >= 0; i--){
-                    SuperItem superitem = matePattern.getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("MS")){
-//                        coords[1] = superitem.getPos();
-                        int dist = Math.abs(mateARPsuperItemPos - superitem.getPos());
-                        arpSpanBpMapQ[1] = superitem.getSumMapQ();
-                        arpSpanBpWeight[1] = superitem.getWeight();
-                        arpSpanBPItem[1] = superitem.getType();
-                        if (dist < closestBP){
-                            closestBP = dist;
-                            coords[1] = superitem.getPos();                            
-                        }
-                        if (coords[1] == tmpCoords[1]){                            
-                            arpSpanUseSplit = true;
-                            return tmpCoords;
-                        }
-                        break;
-                    }
-                }
-            }
-            if (leftMostARPsuperitemIdx < matePatternLength){
-                for (int i = leftMostARPsuperitemIdx; i < matePatternLength; i++){
-                    SuperItem superitem = matePattern.getSuperItemFromOriginal(database, i);
-                    if (!superitem.isARPsuperitem() && superitem.getType().equals("MS")){
-                        int dist = Math.abs(mateARPsuperItemPos - superitem.getPos());
-                        if (dist < closestBP){
-                            coords[1] = superitem.getPos();
-                            arpSpanBpMapQ[1] = superitem.getSumMapQ();
-                            arpSpanBpWeight[1] = superitem.getWeight();
-                            arpSpanBPItem[1] = superitem.getType();
-                            if (coords[1] == tmpCoords[1]){
-                                arpSpanUseSplit = true;
-                                return tmpCoords;
-                            }
-                            break;
-                        }                        
-                    }
-                }
+                
+                matePattern.arpLinkedBpHelper(true, 100, k, superitem.getPos(), superitem.getOri(), 
+                        database, coords, arpSpanBpMapQ, arpSpanBpWeight, arpSpanBPItem);                                
             }
         }
         if (coords[1] < coords[0]){
@@ -759,12 +597,113 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
             coords[0] = coords[1];
             coords[1] = tmp;
         }
-        if (ARPsuperItemPos == tmpCoords[0] || mateARPsuperItemPos == tmpCoords[1]){
-            coords = tmpCoords;
-        }
         return coords;
     }
-
+    
+    private void arpLinkedBpHelper(boolean isMate, int expDist, int arpItemIdx, int arpItemPos, String arpItemOri, 
+            SequenceDatabase database, int[] coords, int[] arpBpMapQ, int[] aprBpWeight, String[] arpBpItem){
+        
+        if (arpItemOri.equals("+")){
+            if (arpItemIdx < patternLength){
+                for (int i = arpItemIdx; i < patternLength; i ++){
+                    SuperItem superitem = getSuperItemFromOriginal(database, i);
+                    if (superitem.getType().equals("MS")){
+                        int dist = Math.abs(superitem.getPos() - arpItemPos);                        
+                        if (dist < expDist){
+                            expDist = dist;
+                             
+                            if (!isMate){
+                                coords[0] = superitem.getPos(); 
+                                arpBpMapQ[0] = superitem.getSumMapQ();
+                                aprBpWeight[0] = superitem.getWeight();
+                                arpBpItem[0] = superitem.getType();
+                            }else{
+                                coords[1] = superitem.getPos(); 
+                                arpBpMapQ[1] = superitem.getSumMapQ();
+                                aprBpWeight[1] = superitem.getWeight();
+                                arpBpItem[1] = superitem.getType();
+                            }                 
+ 
+                                                      
+                        }
+                        break;
+                    }
+                }
+            }
+            if(arpItemIdx > 0){
+                for (int i = arpItemIdx; i>=0 ; i--){
+                    SuperItem superitem = getSuperItemFromOriginal(database, i);
+                    if (superitem.getType().equals("MS")){
+                        int dist = Math.abs(superitem.getPos() - arpItemPos);
+                        if (dist < expDist){                            
+                            if (!isMate){
+                                coords[0] = superitem.getPos();
+                                arpBpMapQ[0] = superitem.getSumMapQ();
+                                aprBpWeight[0] = superitem.getWeight();
+                                arpBpItem[0] = superitem.getType();
+                            }else{
+                                coords[1] = superitem.getPos();
+                                arpBpMapQ[1] = superitem.getSumMapQ();
+                                aprBpWeight[1] = superitem.getWeight();
+                                arpBpItem[1] = superitem.getType();
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        else{    
+            if(arpItemIdx > 0){
+                for (int i = arpItemIdx; i>=0 ; i--){
+                    SuperItem superitem = getSuperItemFromOriginal(database, i);
+                    if (superitem.getType().equals("SM")){
+                        int dist = Math.abs(superitem.getPos() - arpItemPos);
+                        if (dist < expDist){                                                                                    
+                            expDist = dist;                            
+                            if (!isMate){
+                                coords[0] = superitem.getPos();
+                                arpBpMapQ[0] = superitem.getSumMapQ();
+                                aprBpWeight[0] = superitem.getWeight();
+                                arpBpItem[0] = superitem.getType();
+                            }else{
+                                coords[1] = superitem.getPos();
+                                arpBpMapQ[1] = superitem.getSumMapQ();
+                                aprBpWeight[1] = superitem.getWeight();
+                                arpBpItem[1] = superitem.getType();
+                            }
+                            break;
+                        }
+                    }
+                }
+            }            
+            if (arpItemIdx < patternLength){
+                for (int i = arpItemIdx; i < patternLength; i ++){
+                    SuperItem superitem = getSuperItemFromOriginal(database, i);
+                    if (superitem.getType().equals("SM")){
+                        int dist = Math.abs(superitem.getPos() - arpItemPos);                        
+                        if (dist < expDist){
+                            
+                            if (!isMate){
+                                coords[0] = superitem.getPos();
+                                arpBpMapQ[0] = superitem.getSumMapQ();
+                                aprBpWeight[0] = superitem.getWeight();
+                                arpBpItem[0] = superitem.getType();
+                            }else{
+                                coords[1] = superitem.getPos();
+                                arpBpMapQ[1] = superitem.getSumMapQ();
+                                aprBpWeight[1] = superitem.getWeight();
+                                arpBpItem[1] = superitem.getType();
+                            }                     
+                        }
+                        break;
+                    }
+                }
+            }
+            
+        }
+        
+    }
      
     
     public void crossLinkBpEstimate(SequenceDatabase database){    
@@ -858,20 +797,20 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
     
     public int[] splitAlignForBP(SequenceDatabase database){
         int[] pos = new int[2];       
-                 
-        for (int i = 0;i < superitems.size();i++){
-            SuperItem superitem = superitems.get(i).getSuperItem(database);
+        
+        for (int i = 0;i < MSSuperItems.size();i++){
+            SuperItem superitem = MSSuperItems.get(i).getSuperItem(database);
+//            String superItemType = superitem.getType();
             int superItemPos = superitem.getPos();
-            int splitAlignPos = superitem.getSplitAlignPos();
+            int splitAlignPos = superitem.getSplitAlignPos();            
             if (splitAlignPos != -1 && superItemPos != splitAlignPos){
-                splitReadMapQ = superitem.getSplitReadMapQ();
-                splitReadSup = superitem.getSplitReadCount();
-                if (superitem.getType().equals("ARP_SMALL_INSERT")){
-                    pos[0] = patternLeftMostPos;
-                    pos[1] = patternRightMostPos;
-                    
+                                               
+                if (Math.abs(superItemPos - splitAlignPos) > 1000000){
+                    continue;
                 }
-                else{
+                if (superitem.getSplitReadCount() > splitReadSup){
+                    splitReadMapQ = superitem.getSplitReadMapQ();
+                    splitReadSup = superitem.getSplitReadCount();
                     if (superItemPos < splitAlignPos){
                         pos[0] = superItemPos;
                         pos[1] = splitAlignPos;
@@ -879,11 +818,13 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
                         pos[0] = splitAlignPos;
                         pos[1] = superItemPos;
                     }
-                    // If we find the split align within the pattern defined range, return.
-                    if (pos[0] >= patternLeftMostPos && pos[1] <= patternRightMostPos){                                        
-                        break;
-                    }   
                 }
+                
+                // If we find the split align within the pattern defined range, return.
+                if (pos[0] >= patternLeftMostPos && pos[1] <= patternRightMostPos){                                        
+                    break;
+                }   
+                
                              
             }
             
@@ -1066,13 +1007,6 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
         info[2] = -2;
         
         if (!hasSmallInsert){
-//            if (ARPSuperItems.size() == 1){
-//                info = arpLinkInfer(database, minQ);                
-//            }else{
-//                info[0] = ARPSuperItems.get(0).leftMostPos;
-//                info[1] = ARPSuperItems.get(ARPSuperItems.size() - 1).leftMostPos;
-//                info[2] = -3;
-//            }
             info = arpLinkInfer(database, minQ);
         }
         
@@ -1087,20 +1021,135 @@ public class pseudoSequentialPattern implements Comparable<pseudoSequentialPatte
         int[] info = new int[]{-1, -1, 0};
         for (int i = 0; i < superitems.size(); i++){
             SuperItem si = superitems.get(i).getSuperItem(database);
-            if (si.getType().equals("ARP_OEM") && si.getWeightRatio() >= 0.2){                
-                info[2] = si.getWeight();                               
+//            if (si.getType().equals("ARP_OEM") && si.getWeightRatio() >= 0.2){                
+//                                              
+//                
+//                if (si.getOri().equals("+")){                    
+//                    info[0] = si.getPos();
+//                    info[1] = i == superitems.size() - 1 ? -1:patternRightMostPos;
+//                    
+//                }else{
+//                    info[0] = i == 0 ? -1:patternLeftMostPos;
+//                    info[1] = si.getPos();
+//                }                                                
+//            }
+            if (si.getType().equals("ARP_OEM") && si.getWeightRatio() >= 0.2){
+                info[2] = si.getWeight(); 
+                int[] bp = oemBpSearch(i, si.getOri(), si.getPos(), database);
+                if (bp[0]!=-1 && bp[1]!=-1){
+                    info[0] = bp[0];
+                    info[1] = bp[1];
+                }
                 
-                if (si.getOri().equals("+")){                    
-                    info[0] = si.getPos();
-                    info[1] = i == superitems.size() - 1 ? -1:patternRightMostPos;
-                    
-                }else{
-                    info[0] = i == 0 ? -1:patternLeftMostPos;
-                    info[1] = si.getPos();
-                }                                                
             }
         }
         return info;
+    }
+    
+    private int[] oemBpSearch(int oemIdx, String oemOri, int oemPos, SequenceDatabase database){
+        int[] distToIdx;        
+        int[] bp; 
+        
+        if(oemOri.equals("+")){            
+            distToIdx = new int[superitems.size() - oemIdx];
+            for (int i = oemIdx; i < superitems.size(); i++){
+                SuperItem si = superitems.get(i).getSuperItem(database);                
+                if (si.isClipped()){                     
+                    distToIdx[i - oemIdx] = si.getPos() ;
+//                    lastPos = si.getPos();                                       
+                }else{
+                    distToIdx[i - oemIdx] = -1;
+                }
+            }     
+            
+            bp = oemBpHelper(distToIdx, oemIdx, oemOri, database);
+                        
+        }else{
+            distToIdx = new int[oemIdx + 1];
+            for (int i = oemIdx; i >= 0; i--){
+                SuperItem si = superitems.get(i).getSuperItem(database);                
+                if (si.isClipped()){                     
+                    distToIdx[i] = si.getPos();
+//                    lastPos = si.getPos();                                       
+                }else{
+                    distToIdx[i] = -1;
+                }
+            }
+            bp = oemBpHelper(distToIdx, oemIdx, oemOri, database);
+            
+        }
+                                       
+        return bp;
+        
+    }
+    
+    
+    private int[] oemBpHelper(int[] distArray, int oemIdx, String oemOri, SequenceDatabase database){
+        int bp[] = new int[]{-1, -1};
+        if (oemOri.equals("+")){
+            // ARP_OEM is the last superitem in the pattern
+            if (oemIdx == superitems.size() - 1){
+                return bp;
+            }
+            for (int i = 1; i < distArray.length;i++){
+                if (distArray[i] == -1){
+                    continue;
+                }
+
+                int closeNum = 1;
+                int sumDist = 0;
+                int leftBoundIdx = -1;
+
+                for (int j = 1; i + j < distArray.length; j++){
+                    if (distArray[i + j] == -1){
+                        continue;
+                    }
+                    sumDist += distArray[i + j] - distArray[i];
+                    if (sumDist < 100){
+                        closeNum += 1;
+                        leftBoundIdx = i + j;
+                    }
+                }
+                if (closeNum > 1 && leftBoundIdx != -1){
+                    bp[0] = superitems.get(oemIdx).getSuperItem(database).getPos();
+//                    bp[0] = superitems.get(i + oemIdx).getSuperItem(database).getPos();
+                    bp[1] = superitems.get(leftBoundIdx + oemIdx).getSuperItem(database).getPos();
+                    
+                }
+            }
+        }else{
+            // ARP_OEM is the first superitem in the pattern
+            if (oemIdx == 0){
+                return bp;
+            }
+    
+            for (int i = oemIdx - 1; i >= 0; i--){
+                if (distArray[i] == -1){
+                    continue;
+                }
+
+                int closeNum = 1;
+                int sumDist = 0;
+                int leftBoundIdx = -1;
+
+                for (int j = 1; i - j >= 0; j++){
+                    if (distArray[i - j] == -1){
+                        continue;
+                    }
+                    sumDist += distArray[i] - distArray[i - j];
+                    if (sumDist < 100){
+                        closeNum += 1;
+                        leftBoundIdx = i - j;
+                    }
+                }
+                if (closeNum > 1 && leftBoundIdx != -1){
+                    bp[0] = superitems.get(leftBoundIdx).getSuperItem(database).getPos();
+                    bp[1] = superitems.get(oemIdx).getSuperItem(database).getPos();                    
+                }
+            }
+        }
+        
+        return bp;
     }
     
     public int[] multiClippedPatternPosEstimate(SequenceDatabase database){

@@ -4,19 +4,9 @@
  * and open the template in the editor.
  */
 package utils;
-import contiguousfspm.pseudoSequentialPattern;
-import htsjdk.samtools.QueryInterval;
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.List;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  *
@@ -45,9 +35,17 @@ public class svOutInfo {
     int[] suspeticRegion;
     boolean isPassed = true;
     
-    
-    
-    
+    public svOutInfo(int s, int e, String patternStr,List<Integer> itemWeight, int[] susRegion, List<Double> wRatio, List<String> oris){
+        start = s;
+        end = e;        
+        pattern = patternStr;
+        weights = itemWeight;
+        suspeticRegion = susRegion;
+        ratios = wRatio;
+        this.oris = oris;
+        isPassed = false;
+    }
+        
     public svOutInfo(int s, int e, String patternStr, int linkFlag, int[] supEvidence, List<Integer> itemWeight, int[] susRegion, List<Double> wRatio, List<String> oris){        
         start = s;
         end = e;
@@ -136,8 +134,7 @@ public class svOutInfo {
         }
         if(linkType == 0){
             linkTypeStr = "None";
-            sb.append("None");            
-            sb.append(";SUP=NA");
+            sb.append("None");                        
         }
         if (linkType == 1){
             linkTypeStr = "ARP_Span";
@@ -377,10 +374,16 @@ public class svOutInfo {
         return identical;
     }
        
-    
+    public void writeSusRegion(BufferedWriter susRegionWriter, String chrName, StringBuilder sb) throws IOException{
+        sb.append(chrName);
+//        sb.append("\t");
+        sb.append(toString());
+        susRegionWriter.write(sb.toString());
+        susRegionWriter.newLine();
+    }
   
     
-    public void writeVariantsOutput(BufferedWriter regionWriter, BufferedWriter smallRegionWriter, String chrName, StringBuilder sb) throws IOException{
+    public void writeVariantsOutput(BufferedWriter regionWriter, String chrName, StringBuilder sb) throws IOException{
         String svInfos = toString();
         if (end - start < 50) {
             
@@ -390,7 +393,7 @@ public class svOutInfo {
                 regionWriter.write(sb.toString());
                 regionWriter.newLine(); 
             } 
-            if (pattern.contains("ARP") && (linkTypeStr.contains("Self")||linkTypeStr.contains("Split"))){
+            else if (pattern.contains("ARP") && (linkTypeStr.contains("Self")||linkTypeStr.contains("Split"))){
                 start = suspeticRegion[0];
                 end = suspeticRegion[1];
                 
@@ -399,10 +402,16 @@ public class svOutInfo {
                 regionWriter.write(sb.toString());
                 regionWriter.newLine(); 
             }                       
-            if (pattern.contains("ARP_SMALL_INSERT")){
+            else if (pattern.contains("ARP_SMALL_INSERT")){
                 start = suspeticRegion[0];
                 end = suspeticRegion[1];
                 
+                sb.append(chrName);
+                sb.append(svInfos);
+                regionWriter.write(sb.toString());
+                regionWriter.newLine(); 
+            }
+            else if (linkTypeStr.contains("OEM")){
                 sb.append(chrName);
                 sb.append(svInfos);
                 regionWriter.write(sb.toString());
@@ -416,7 +425,7 @@ public class svOutInfo {
                 regionWriter.write(sb.toString());
                 regionWriter.newLine();
                 
-            }  else{
+            } else{
                 
                 sb.append(chrName);
                 sb.append(svInfos);

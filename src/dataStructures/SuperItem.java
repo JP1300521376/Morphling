@@ -36,7 +36,8 @@ public class SuperItem implements Comparable<SuperItem>{
     protected int numMinusRead;
     protected int sumMapQ;
     protected int splitReadMapQ;
-    protected int splitAlignedRead;
+    protected int splitAlignedRead = 0;
+    protected int interChromRead = 0;
     protected String matchedConsensus = "";
     protected String clippedConsensus = "";
 //    protected String readConsensus; 
@@ -45,6 +46,12 @@ public class SuperItem implements Comparable<SuperItem>{
     public SuperItem(){
         
     }
+    
+    // Create SuperItem in memory
+    public SuperItem(List<MutSignal> mutSignals){
+        createSuperItem(mutSignals);        
+    }
+    
     // construct SuperItem from file records
     public SuperItem(String[] tokens){
         
@@ -63,25 +70,22 @@ public class SuperItem implements Comparable<SuperItem>{
         numMinusRead = Integer.parseInt(tokens[10]);
         splitAlignedRead = Integer.parseInt(tokens[11]);
         splitReadMapQ = Integer.parseInt(tokens[12]);
-        
-        superitemInterval = decodeIntervalFromString(tokens[13]);
+        interChromRead = Integer.parseInt(tokens[13]);
+        superitemInterval = decodeIntervalFromString(tokens[14]);
                 
-        superitemMateInterval = decodeIntervalFromString(tokens[14]);
+        superitemMateInterval = decodeIntervalFromString(tokens[15]);
                 
-        String qNameColumn = tokens[15];
+        String qNameColumn = tokens[16];
         if (!qNameColumn.equals("*")){
             qnames = qNameColumn.split(",");
 
         }
-        matchedConsensus = tokens[16];
-        clippedConsensus = tokens[17];
+        matchedConsensus = tokens[17];
+        clippedConsensus = tokens[18];
               
     }
     
-    // Create SuperItem in memory
-    public SuperItem(List<MutSignal> mutSignals){
-        createSuperItem(mutSignals);        
-    }
+    
     
     @Override
     public int compareTo(SuperItem otherSuperItem){
@@ -119,8 +123,8 @@ public class SuperItem implements Comparable<SuperItem>{
         sb.append("id:" + chromIdx);
         sb.append(" t:" + type);
         sb.append(" p:" + superItemPos);
-        sb.append(" w:" + weight);
-        sb.append(" r:" + weightRatio);
+//        sb.append(" w:" + weight);
+//        sb.append(" r:" + weightRatio);
         sb.append(" o:" + getReadOri());
         return sb.toString();
     }    
@@ -134,8 +138,10 @@ public class SuperItem implements Comparable<SuperItem>{
         if (qnames.length != 0){
             StringBuilder sb = new StringBuilder();
             for (String qname : qnames){
-                sb.append(qname);
-                sb.append(",");
+                if (qname != null){
+                    sb.append(qname);
+                    sb.append(",");
+                }                
             }
             str = sb.substring(0, sb.length() - 1);
         }        
@@ -157,7 +163,7 @@ public class SuperItem implements Comparable<SuperItem>{
         sb.append(superItemPos);
         sb.append("\t");        
         sb.append(splitAlignedPos);
-        sb.append("\t");              
+        sb.append("\t");
         sb.append(ori);
         sb.append("\t");
         sb.append(weight);
@@ -174,6 +180,8 @@ public class SuperItem implements Comparable<SuperItem>{
         sb.append("\t");
         sb.append(splitReadMapQ);
         sb.append("\t");
+        sb.append(interChromRead);
+        sb.append("\t");
         sb.append(superitemInterval.toString());
         sb.append("\t");
         sb.append(superitemMateInterval.toString());
@@ -181,12 +189,12 @@ public class SuperItem implements Comparable<SuperItem>{
         sb.append(qNamesToString());
         sb.append("\t");
         if (matchedConsensus.equals("")){
-            matchedConsensus = "-";
+            matchedConsensus = "*";
         }
         sb.append(matchedConsensus);  
         sb.append("\t");
         if (clippedConsensus.equals("")){
-            clippedConsensus = "-";
+            clippedConsensus = "*";
         }
         sb.append(clippedConsensus);
         return sb.toString();
@@ -200,6 +208,9 @@ public class SuperItem implements Comparable<SuperItem>{
     }
     public boolean isARPsuperitem(){
         return type.contains("ARP");
+    }
+    public boolean isClipped(){
+        return type.contains("S");
     }
     public QueryInterval getSuperitemRegion(){
         return superitemInterval;
@@ -295,16 +306,23 @@ public class SuperItem implements Comparable<SuperItem>{
         
         int longestD = -1;
         int signalIdx = 0;
+        
+        List<Integer> splitPosList = new ArrayList<>(mutList.size());
+        
         // sort the mutational signal to get the SuperItem genome intervals
         for (MutSignal signal : mutList){   
-            sumMapQ += signal.getMapQ();            
+            sumMapQ += signal.getMapQ();    
+            if (signal.isInterChrom()){
+                interChromRead += 1;
+            }            
             if (signal.getMutSignalOri().equals("-")){
                 numMinusRead += 1;
             }else{
                 numPlusRead += 1;
             }
             if(signal.isSplitAlign()){
-                splitAlignedPos = signal.getSplitAlignPos();
+                splitPosList.add(signal.getSplitAlignPos());
+//                splitAlignedPos = signal.getSplitAlignPos();
                 splitAlignedRead += 1;
                 splitReadMapQ += signal.getMapQ();
             }
@@ -361,17 +379,18 @@ public class SuperItem implements Comparable<SuperItem>{
         chromName = majoritySignal.getSignalRef();
         superItemPos = majoritySignal.getMutPos();
         weight = mutList.size();   
+
+        if (!splitPosList.isEmpty()){
+            splitAlignedPos = getMedian(splitPosList);
+        }
         
-//        if (superItemPos == 258783){
-//            System.out.println("ssss");
-//        }
-        
+                
         if (longestD != -1){
             splitAlignedPos = superItemPos + longestD;
         }        
                 
-        setSuperItemEntropy(countList); 
-        if (!type.equals("SMS")){
+//        setSuperItemEntropy(countList); 
+        if (type.equals("SM") || type.equals("MS")){
             buildConsensusString(mutList);
             if (("SM").equals(type)){
                 StringBuilder sb = new StringBuilder(clippedConsensus);
